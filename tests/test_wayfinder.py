@@ -1,4 +1,6 @@
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -7,6 +9,18 @@ import wayfinder
 
 
 class ParseOutputTests(unittest.TestCase):
+    def test_reuses_module_when_terragrunt_emits_init_then_plan_headers(self):
+        modules = wayfinder.parse_output([
+            "Running command: terraform init in ./prod/app",
+            "init complete",
+            "Running command: terraform plan in ./prod/app",
+            "Plan: 2 to add, 1 to change, 0 to destroy.",
+        ])
+        self.assertEqual(len(modules), 1)
+        self.assertEqual(modules[0].path, "./prod/app")
+        self.assertEqual((modules[0].added, modules[0].changed, modules[0].destroyed), (2, 1, 0))
+        self.assertIn("init complete", modules[0].detail)
+
     def test_parses_module_summaries_and_counts(self):
         modules = wayfinder.parse_output([
             "Running command: terraform plan in ./prod/app",
@@ -32,6 +46,21 @@ class ParseOutputTests(unittest.TestCase):
         modules = wayfinder.parse_output(["unrecognized output"])
         self.assertIsNone(modules[0].added)
         self.assertEqual(wayfinder.totals(modules), (0, 0, 0))
+
+    def test_show_reports_missing_or_invalid_result_without_traceback(self):
+        script = Path(__file__).parents[1] / "src" / "wayfinder.py"
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "missing.json"
+            invalid = Path(directory) / "invalid.json"
+            invalid.write_text("not json", encoding="utf-8")
+            for result_path in (missing, invalid):
+                proc = subprocess.run(
+                    [sys.executable, str(script), "show", "--run", str(result_path)],
+                    text=True, capture_output=True, check=False,
+                )
+                self.assertEqual(proc.returncode, 2)
+                self.assertNotIn("Traceback", proc.stderr)
+                self.assertIn("Cannot read result", proc.stderr)
 
 
 if __name__ == "__main__":
