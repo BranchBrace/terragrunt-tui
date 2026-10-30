@@ -38,13 +38,18 @@ class RunResult:
 
 def parse_output(lines: Iterable[str], exit_code: int = 0) -> list[ModuleResult]:
     modules: list[ModuleResult] = []
+    modules_by_path: dict[str, ModuleResult] = {}
     current: ModuleResult | None = None
     for raw in lines:
         line = raw.rstrip("\r\n")
         header = MODULE.search(line)
         if header:
-            current = ModuleResult(path=header.group(1).rstrip("/"))
-            modules.append(current)
+            path = header.group(1).rstrip("/")
+            current = modules_by_path.get(path)
+            if current is None:
+                current = ModuleResult(path=path)
+                modules_by_path[path] = current
+                modules.append(current)
         if current is None:
             current = ModuleResult(path=".")
             modules.append(current)
@@ -124,8 +129,12 @@ def drill_down(modules: list[ModuleResult]) -> None:
 
 
 def show(args: argparse.Namespace) -> int:
-    data = json.loads(Path(args.run).read_text(encoding="utf-8"))
-    result = RunResult(**{**data, "modules": [ModuleResult(**m) for m in data["modules"]]})
+    try:
+        data = json.loads(Path(args.run).read_text(encoding="utf-8"))
+        result = RunResult(**{**data, "modules": [ModuleResult(**m) for m in data["modules"]]})
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"Cannot read result {args.run}: {exc}", file=sys.stderr)
+        return 2
     print_summary(result)
     if sys.stdin.isatty() and result.modules:
         drill_down(result.modules)
