@@ -13,6 +13,9 @@ from pathlib import Path
 PLAN_COUNTS = re.compile(r"Plan:\s*(\d+) to add,\s*(\d+) to change,\s*(\d+) to destroy\.")
 NO_CHANGES = re.compile(r"No changes\. (?:Your infrastructure matches the configuration|Infrastructure is up-to-date)", re.IGNORECASE)
 MODULE = re.compile(r"(?:\bin\s+|\bModule\s+)[\"']?([./][^\s\"']+)", re.IGNORECASE)
+# Terragrunt 1.x prefixes every unit line: "00:42:44.246 STDOUT [prod\network] terraform: ..."
+UNIT = re.compile(r"^\S+\s+[A-Z]+\s+\[(?!\.\.\])([^\]]+)\]\s")
+ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
 
 @dataclass
@@ -40,19 +43,29 @@ def parse_output(lines: Iterable[str], exit_code: int = 0) -> list[ModuleResult]
     modules: list[ModuleResult] = []
     modules_by_path: dict[str, ModuleResult] = {}
     current: ModuleResult | None = None
+    unit_prefixes = False
+
+    def module_for(path: str) -> ModuleResult:
+        module = modules_by_path.get(path)
+        if module is None:
+            module = ModuleResult(path=path)
+            modules_by_path[path] = module
+            modules.append(module)
+        return module
+
     for raw in lines:
-        line = raw.rstrip("\r\n")
-        header = MODULE.search(line)
-        if header:
-            path = header.group(1).rstrip("/")
-            current = modules_by_path.get(path)
-            if current is None:
-                current = ModuleResult(path=path)
-                modules_by_path[path] = current
-                modules.append(current)
+        line = ANSI.sub("", raw.rstrip("\r\n"))
+        unit = UNIT.search(line)
+        if unit:
+            unit_prefixes = True
+            current = module_for(unit.group(1).replace("\\", "/"))
+        elif unit_prefixes:
+            # Unprefixed Terragrunt 1.x lines (run summary, error recap) belong to the run, not a unit.
+            current = module_for(".")
+        elif header := MODULE.search(line):
+            current = module_for(header.group(1).rstrip("/"))
         if current is None:
-            current = ModuleResult(path=".")
-            modules.append(current)
+            current = module_for(".")
         current.detail.append(line)
         counts = PLAN_COUNTS.search(line)
         if counts:

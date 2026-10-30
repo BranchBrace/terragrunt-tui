@@ -47,6 +47,48 @@ class ParseOutputTests(unittest.TestCase):
         self.assertIsNone(modules[0].added)
         self.assertEqual(wayfinder.totals(modules), (0, 0, 0))
 
+    def test_strips_ansi_colors_before_matching(self):
+        modules = wayfinder.parse_output([
+            "Running command: terraform plan in ./prod/app",
+            "\x1b[1mPlan:\x1b[0m 2 to add, 1 to change, 0 to destroy.\x1b[0m",
+            "Running command: terraform plan in ./prod/db",
+            "\x1b[0m\x1b[1m\x1b[32mNo changes.\x1b[0m\x1b[1m Your infrastructure matches the configuration.\x1b[0m",
+        ])
+        self.assertEqual([(m.status, m.added) for m in modules], [("planned", 2), ("no_changes", 0)])
+        self.assertNotIn("\x1b", "".join(modules[0].detail))
+
+    def test_attributes_terragrunt_v1_unit_prefixes(self):
+        modules = wayfinder.parse_output([
+            "00:42:43.155 INFO   The following units will be run, starting with dependencies and then their dependents:",
+            "├── prod\\network",
+            "00:42:44.246 STDOUT [prod\\network] terraform: \x1b[1mPlan:\x1b[0m 2 to add, 4 to change, 1 to destroy.",
+            "00:42:44.248 STDOUT [dev\\network] terraform: No changes. Your infrastructure matches the configuration.",
+            "00:42:44.948 STDOUT [prod\\security] terraform: Plan: 2 to add, 0 to change, 2 to destroy.",
+            "00:42:44.950 INFO   [prod\\network] terraform: Terraform has been successfully initialized!",
+            "",
+            "❯❯ Run Summary  3 units  6s",
+            "   Succeeded    3",
+        ])
+        by_path = {m.path: m for m in modules}
+        self.assertEqual(set(by_path), {".", "prod/network", "dev/network", "prod/security"})
+        self.assertEqual((by_path["prod/network"].added, by_path["prod/network"].changed), (2, 4))
+        self.assertIn("Terraform has been successfully initialized!", by_path["prod/network"].detail[-1])
+        self.assertEqual(by_path["dev/network"].status, "no_changes")
+        self.assertIn("   Succeeded    3", by_path["."].detail)
+        self.assertEqual(wayfinder.totals(modules), (4, 4, 3))
+
+    def test_terragrunt_v1_failure_stays_on_failing_unit(self):
+        modules = wayfinder.parse_output([
+            "00:43:40.100 STDOUT [prod\\dns] terraform: Plan: 0 to add, 1 to change, 0 to destroy.",
+            "00:43:42.677 STDERR [dev\\apps\\feature-flags] terraform: │ Error: Invalid value for variable",
+            "00:43:42.700 ERROR  Run failed: 1 error occurred:",
+            "  │ Error: Invalid value for variable",
+        ], 1)
+        by_path = {m.path: m for m in modules}
+        self.assertEqual(by_path["dev/apps/feature-flags"].status, "failed")
+        self.assertEqual(by_path["prod/dns"].status, "planned")
+        self.assertEqual(by_path["."].status, "failed")
+
     def test_show_reports_missing_or_invalid_result_without_traceback(self):
         script = Path(__file__).parents[1] / "src" / "wayfinder.py"
         with tempfile.TemporaryDirectory() as directory:
