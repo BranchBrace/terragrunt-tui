@@ -1,0 +1,4 @@
+# Release images published by scripts/release-images.sh on every rc/main release.
+# One line per image: <name> <dockerfile> [context]
+# Example: api backend/Dockerfile .
+# Staging (Argo CD) can only be wired once at least one image is published here.
