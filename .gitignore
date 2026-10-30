@@ -8,6 +8,7 @@ __pycache__/
 .pytest_cache/
 .wayfinder/
 *.pyc
+*.egg-info/
 coverage/
 
 # Test output (never committed, never uploaded by CI)
