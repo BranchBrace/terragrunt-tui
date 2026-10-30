@@ -6,10 +6,10 @@ Run one Terragrunt `run --all plan` from the selected live working directory, su
 
 ## Command contract
 
-- `wayfinder run [--cwd PATH] [--terragrunt PATH]`: run `terragrunt run --all plan` once, capture combined output, stream it to a log, and parse Terraform plan summaries and module headers.
+- `wayfinder run [--cwd PATH] [--terragrunt PATH]`: run `terragrunt run --all plan` once, capture combined output, show it after the command exits, save module details in the JSON result, and parse Terraform plan summaries and module headers.
 - `wayfinder show [--run PATH]`: display a prior JSON result.
 - No apply/destroy or arbitrary pass-through command is accepted.
-- Exit 0 if all modules planned successfully; nonzero if execution or module parsing fails.
+- Exit 0 when Terragrunt exits successfully; return its nonzero exit code on execution failure. Unknown module output is preserved and shown as unknown, not treated as a successful parse or silently guessed.
 
 ## Result model
 
@@ -21,7 +21,7 @@ The tool never modifies infrastructure state. Terragrunt output formats vary by 
 
 ## TUI
 
-Use an interactive numbered module list with an explicit detail action. If stdin is not a terminal, render a readable summary and leave details in the saved result/log.
+Use an interactive numbered module list with an explicit detail action. If stdin is not a terminal, render a readable summary and leave details in the saved JSON result.
 
 ## Platform delivery
 
