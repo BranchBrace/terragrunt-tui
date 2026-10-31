@@ -33,6 +33,19 @@ uv run wayfinder show --run ./wayfinder-result.json
 
 The saved result contains redacted structured resource data but does not contain raw logs or native plan files. A failed, unreadable, or incomplete run suppresses global totals and returns a nonzero exit code.
 
+## Keyboard navigation
+
+| Key | Action |
+|---|---|
+| `/` | Focus the module search field. |
+| `m` | Focus the module list; use ↑/↓ to move, with details updating as you move. |
+| `r` | Focus the resource list; use ↑/↓ to inspect before/after values live. |
+| `l` | Show or hide captured logs. |
+| `Esc` | Return focus to module search. |
+| `q` | Quit; if a plan is running, stop its process and clean the temporary run directory. |
+
+The footer also displays these shortcuts. Module statuses and resource actions use distinct colors; selection follows the cursor, so Enter is not required for routine browsing.
+
 ## Safety and temporary files
 
 Wayfinder runs only `terragrunt run --all ... plan`; it does not offer apply, destroy, or arbitrary command passthrough. Use a disposable fixture for first runs, and inspect the proposed plan before any separate manual action.
@@ -49,7 +62,7 @@ Run from the repository root in each shell:
 - Git Bash: install `uv` and Terragrunt for that shell, then use the same command.
 - PowerShell: install `uv` and Terragrunt, then run `uv run wayfinder run --cwd .\fixture`.
 
-Compatibility with WSL, Git Bash, and PowerShell is not yet manually verified. Use only a disposable Terragrunt fixture and no sensitive credentials. For each shell, record OS version and `terragrunt --version`, then verify scope, progress, changed/no-change modules, create/update/delete/replace details, redaction, error handling, and cleanup. Report skipped shells as untested.
+Manual results on the previous revision: WSL was unavailable; Git Bash and PowerShell launched and accepted a few keys, but navigation and presentation were not usable. This improved revision has not yet been manually checked. Use only a disposable Terragrunt fixture and no sensitive credentials. For each shell, record OS version and `terragrunt --version`, then verify scope, progress, changed/no-change modules, create/update/delete/replace details, redaction, error handling, keyboard search/navigation, and cleanup. Report skipped shells as untested.
 
 ## Linux synthetic checks
 
