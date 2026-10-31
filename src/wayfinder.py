@@ -244,8 +244,7 @@ def execute_plan(cwd: Path, terragrunt: str, units: list[str] | None = None, on_
             process_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
         try:
             process = subprocess.Popen(
-                command, cwd=cwd, text=True, encoding="utf-8", errors="replace",
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **process_options,
+                command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **process_options,
             )
         except OSError as exc:
             raise RuntimeError(f"Cannot start Terragrunt: {exc}") from exc
@@ -253,7 +252,7 @@ def execute_plan(cwd: Path, terragrunt: str, units: list[str] | None = None, on_
         assert process.stdout is not None
         try:
             for raw in process.stdout:
-                line = raw.rstrip("\r\n")
+                line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
                 logs.append(line)
                 header = MODULE.search(line)
                 if on_progress and header:
