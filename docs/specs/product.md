@@ -14,7 +14,7 @@ Fournir une CLI/TUI Rust locale en lecture seule pour découvrir les unités Ter
 
 ## Modèle de résultat
 
-Le modèle versionné conserve la commande exacte, le code de sortie, la complétude, l’annulation, les totaux (uniquement si tout le run est complet) et les unités. Chaque unité porte un chemin, un statut (`planned`, `no_changes`, `failed`, `unknown`), une vague éventuellement inconnue, des compteurs et des ressources. Chaque ressource porte l’adresse, les actions et les valeurs avant/après. Les champs marqués `*_sensitive` sont remplacés par `[REDACTED]`, les champs `*_unknown` par `[UNKNOWN]`. Une action de remplacement (`delete` + `create`) est affichée `REPLACE`, comptée comme un ajout et une suppression.
+Le modèle versionné conserve la commande exacte, le code de sortie, la complétude, l’annulation, les totaux (uniquement si tout le run est complet) et les unités. Chaque unité porte un chemin, un statut (`planned`, `no_changes`, `failed`, `unknown`), une vague éventuellement inconnue, des compteurs et des ressources. Chaque ressource porte l’adresse, les actions et les valeurs avant/après. Les champs marqués `*_sensitive` sont remplacés par `[REDACTED]`, les champs `*_unknown` par `[UNKNOWN]`. Une action de remplacement (`delete` + `create`) est affichée `REPLACE`, comptée comme un ajout et une suppression. Les actions non reconnues restent visibles comme `UNKNOWN`, marquent l’unité et le run incomplets et suppriment les totaux ; les champs `before`/`after` absents font échouer le parsing plutôt que d’être inventés comme `null`.
 
 ## Revue interactive
 

@@ -18,15 +18,19 @@ pub struct ResourceChange {
 
 impl ResourceChange {
     pub fn kind(&self) -> ChangeKind {
-        let create = self.actions.iter().any(|action| action == "create");
-        let delete = self.actions.iter().any(|action| action == "delete");
-        let update = self.actions.iter().any(|action| action == "update");
-        match (create, delete, update) {
-            (true, true, _) => ChangeKind::Replace,
-            (true, false, _) => ChangeKind::Add,
-            (false, true, _) => ChangeKind::Delete,
-            (_, _, true) => ChangeKind::Change,
-            _ => ChangeKind::NoChange,
+        match self.actions.as_slice() {
+            [action] if action == "create" => ChangeKind::Add,
+            [action] if action == "update" => ChangeKind::Change,
+            [action] if action == "delete" => ChangeKind::Delete,
+            [first, second]
+                if (first == "delete" && second == "create")
+                    || (first == "create" && second == "delete") =>
+            {
+                ChangeKind::Replace
+            }
+            [action] if action == "read" => ChangeKind::Read,
+            [action] if action == "no-op" => ChangeKind::NoChange,
+            _ => ChangeKind::Unknown,
         }
     }
 }
@@ -37,7 +41,9 @@ pub enum ChangeKind {
     Delete,
     Change,
     Replace,
+    Read,
     NoChange,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -115,6 +121,12 @@ pub fn parse_plan_json(input: &str) -> Result<(Vec<ResourceChange>, Totals), Pla
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
+        let before = change
+            .get("before")
+            .ok_or_else(|| PlanError::Invalid(format!("resource {address} has no before value")))?;
+        let after = change
+            .get("after")
+            .ok_or_else(|| PlanError::Invalid(format!("resource {address} has no after value")))?;
         if actions.iter().any(|action| action == "create") {
             totals.added += 1;
         }
@@ -129,12 +141,12 @@ pub fn parse_plan_json(input: &str) -> Result<(Vec<ResourceChange>, Totals), Pla
             address,
             actions,
             before: sanitize(
-                change.get("before").unwrap_or(&Value::Null),
+                before,
                 change.get("before_unknown").unwrap_or(&Value::Null),
                 change.get("before_sensitive").unwrap_or(&Value::Null),
             ),
             after: sanitize(
-                change.get("after").unwrap_or(&Value::Null),
+                after,
                 change.get("after_unknown").unwrap_or(&Value::Null),
                 change.get("after_sensitive").unwrap_or(&Value::Null),
             ),
@@ -238,6 +250,21 @@ mod tests {
     fn malformed_or_errored_plans_fail_closed() {
         assert!(parse_plan_json(r#"{"errored":true,"resource_changes":[]}"#).is_err());
         assert!(parse_plan_json(r#"{"resource_changes":[{"address":"broken"}]}"#).is_err());
+    }
+
+    #[test]
+    fn unsupported_resource_actions_are_unknown_not_no_change() {
+        let input = r#"{"resource_changes":[{"address":"test_item.future","change":{"actions":["future-action"],"before":null,"after":null}}]}"#;
+        let (resources, _) = parse_plan_json(input).unwrap();
+        assert_eq!(resources[0].kind(), ChangeKind::Unknown);
+    }
+
+    #[test]
+    fn missing_before_or_after_values_fail_closed() {
+        let missing_before = r#"{"resource_changes":[{"address":"test_item.missing","change":{"actions":["create"],"after":{}}}]}"#;
+        let missing_after = r#"{"resource_changes":[{"address":"test_item.missing","change":{"actions":["delete"],"before":{}}}]}"#;
+        assert!(parse_plan_json(missing_before).is_err());
+        assert!(parse_plan_json(missing_after).is_err());
     }
 
     #[test]

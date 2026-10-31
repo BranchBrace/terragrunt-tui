@@ -1,5 +1,5 @@
 use crate::graph::{DiscoveryError, Unit, dependency_waves, parse_units};
-use crate::model::{ModuleResult, RunResult, parse_plan_json, summarize_modules};
+use crate::model::{ChangeKind, ModuleResult, RunResult, parse_plan_json, summarize_modules};
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
@@ -234,14 +234,27 @@ where
             .and_then(|contents| parse_plan_json(&contents).ok());
         if let Some((resources, totals)) = parsed {
             parsed_count += 1;
-            let has_changes = resources
+            let has_unknown = resources
                 .iter()
-                .any(|resource| !matches!(resource.kind(), crate::model::ChangeKind::NoChange));
+                .any(|resource| resource.kind() == ChangeKind::Unknown);
+            let has_changes = resources.iter().any(|resource| {
+                matches!(
+                    resource.kind(),
+                    ChangeKind::Add | ChangeKind::Change | ChangeKind::Delete | ChangeKind::Replace
+                )
+            });
             modules.push(ModuleResult {
                 path: unit.path.clone(),
-                status: if has_changes { "planned" } else { "no_changes" }.into(),
+                status: if has_unknown {
+                    "unknown"
+                } else if has_changes {
+                    "planned"
+                } else {
+                    "no_changes"
+                }
+                .into(),
                 wave,
-                totals: Some(totals),
+                totals: (!has_unknown).then_some(totals),
                 resources,
                 logs: matching_logs(&log_lines, &unit.path),
             });
@@ -256,7 +269,10 @@ where
             });
         }
     }
-    let complete = exit_code == 0 && parsed_count == units.len() && !units.is_empty();
+    let complete = exit_code == 0
+        && parsed_count == units.len()
+        && !units.is_empty()
+        && modules.iter().all(|module| module.totals.is_some());
     let totals = if complete {
         summarize_modules(&modules)
     } else {
@@ -408,7 +424,8 @@ if args[0] == "find":
 elif args[0] == "run":
     output = pathlib.Path(args[args.index("--json-out-dir") + 1]) / "prod/app/tfplan.json"
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps({"resource_changes":[{"address":"demo_item.secret","change":{"actions":["create"],"before":None,"after":{"token":"plaintext-secret"},"after_sensitive":{"token":True}}}]}))
+    actions = ["future-action"] if pathlib.Path("UNKNOWN_ACTION").exists() else ["create"]
+    output.write_text(json.dumps({"resource_changes":[{"address":"demo_item.secret","change":{"actions":actions,"before":None,"after":{"token":"plaintext-secret"},"after_sensitive":{"token":True}}}]}))
     if pathlib.Path("SLOW").exists():
         sleeper = subprocess.Popen(["sleep", "30"])
         pathlib.Path("CHILD_PID").write_text(str(sleeper.pid))
@@ -460,6 +477,28 @@ else:
         assert_eq!(result.command.last().map(String::as_str), Some("plan"));
         drop(workspace);
         assert!(!workspace_path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unknown_actions_keep_the_resource_visible_and_suppress_totals() {
+        let fixture = tempfile::tempdir().unwrap();
+        fs::write(fixture.path().join("UNKNOWN_ACTION"), "").unwrap();
+        let tools = tempfile::tempdir().unwrap();
+        let binary = fake_terragrunt(tools.path());
+        let terragrunt = binary.to_string_lossy().to_string();
+        let units = discover(&terragrunt, fixture.path()).unwrap();
+        let workspace = RunWorkspace::new().unwrap();
+        let result = execute_plan(&terragrunt, fixture.path(), &units, &workspace, &mut |_| {
+            true
+        })
+        .unwrap();
+
+        assert!(!result.complete);
+        assert!(result.totals.is_none());
+        assert_eq!(result.modules[0].status, "unknown");
+        assert!(result.modules[0].totals.is_none());
+        assert_eq!(result.modules[0].resources[0].kind(), ChangeKind::Unknown);
     }
 
     #[test]

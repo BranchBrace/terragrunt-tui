@@ -592,7 +592,9 @@ fn change_label(kind: ChangeKind) -> (&'static str, Color) {
         ChangeKind::Delete => ("DELETE", Color::Red),
         ChangeKind::Change => ("CHANGE", Color::Rgb(255, 165, 0)),
         ChangeKind::Replace => ("REPLACE", Color::Rgb(255, 165, 0)),
+        ChangeKind::Read => ("READ", Color::Cyan),
         ChangeKind::NoChange => ("NO CHANGE", Color::DarkGray),
+        ChangeKind::Unknown => ("UNKNOWN", Color::Magenta),
     }
 }
 
@@ -717,6 +719,11 @@ mod tests {
         assert_eq!(change_label(ChangeKind::Delete).0, "DELETE");
         assert_eq!(change_label(ChangeKind::Change).1, Color::Rgb(255, 165, 0));
         assert_eq!(change_label(ChangeKind::Replace).1, Color::Rgb(255, 165, 0));
+        assert_eq!(change_label(ChangeKind::Read).0, "READ");
+        assert_eq!(
+            change_label(ChangeKind::Unknown),
+            ("UNKNOWN", Color::Magenta)
+        );
         let counter = counter_line(&Totals {
             added: 2,
             changed: 3,
