@@ -18,7 +18,7 @@ Le modèle versionné conserve la commande exacte, le code de sortie, la complé
 
 ## Revue interactive
 
-- Un premier écran explique clairement le plan qui sera produit, sa racine, les unités découvertes, la commande exacte et l’absence d’application automatique ; l’utilisateur doit confirmer avant exécution.
+- Avant le run, un écran de confirmation présente la racine, le nombre d’unités, la commande exacte, les effets et limites, puis la liste navigable de tous les modules groupés/triés par niveau de dépendance. Chaque ligne indique sa vague ; les dépendances inconnues sont explicitement marquées `VAGUE INCONNUE`. `↑/↓`, `PgUp/PgDn`, `Home/End` permettent de parcourir la liste avant confirmation. La vague est un niveau d’éligibilité dérivé du graphe, pas une garantie d’ordre runtime du scheduler concurrent.
 - L’avancement est affiché à mesure que les sorties Terragrunt identifient des unités. `q`, Échap et Ctrl-C interrompent le processus ; les résultats sont incomplets et les fichiers temporaires sont nettoyés.
 - L’interface comporte trois zones Modules → Ressources → Modifications. La flèche droite/Tab avance et compacte les panneaux précédents en contexte/statut ; flèche gauche/Échap revient sans perdre la sélection. Le focus au troisième niveau rend le détail central.
 - Chaque compteur/action porte un texte et un repère visuel : `ADD` vert, `DELETE` rouge, `CHANGE`/`REPLACE` orange, `UNKNOWN` rose/magenta. Le sens doit rester compréhensible sans couleur.

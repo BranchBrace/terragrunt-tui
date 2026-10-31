@@ -148,7 +148,7 @@ fn resolve_dependency(
     normalize(root, &unit_directory.join(dependency_path))
 }
 
-fn normalize(root: &Path, path: &Path) -> String {
+pub(crate) fn normalize(root: &Path, path: &Path) -> String {
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {

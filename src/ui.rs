@@ -12,7 +12,7 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
-use std::{collections::BTreeMap, io, io::Stdout};
+use std::{collections::BTreeMap, io, io::Stdout, path::Path};
 
 pub struct TerminalSession {
     pub terminal: Terminal<CrosstermBackend<Stdout>>,
@@ -46,39 +46,151 @@ pub fn confirm_plan(
     units: &[crate::graph::Unit],
     workspace: &str,
 ) -> io::Result<bool> {
+    let rows = plan_module_rows(Path::new(root), units);
+    let mut selected = 0usize;
     loop {
         terminal.draw(|frame| {
-            let area = frame.area();
-            let lines = vec![
-                Line::from(Span::styled("WAYFINDER · PLAN UNIQUEMENT", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-                Line::from(""),
-                Line::from(format!("Racine : {root}")),
-                Line::from(format!("Périmètre : {} unités découvertes", units.len())),
-                Line::from(format!("Fichiers de travail temporaires : {workspace}")),
-                Line::from(""),
-                Line::from(Span::styled("Commande qui sera lancée après Entrée :", Style::default().add_modifier(Modifier::BOLD))),
-                Line::from(command),
-                Line::from(""),
-                Line::from(Span::styled("Effets : calcule des plans Terragrunt; ne les applique jamais.", Style::default().fg(Color::Yellow))),
-                Line::from("Aucune commande apply/destroy ni argument libre n'est accepté."),
-                Line::from("Les valeurs sensibles sont masquées dans la vue des changements; cette protection n'est pas une garantie absolue."),
-                Line::from("Les journaux restent cachés par défaut; les plans structurés existent brièvement dans le répertoire temporaire."),
-                Line::from(""),
-                Line::from("Entrée : lancer le plan     q / Échap : annuler"),
-            ];
-            frame.render_widget(
-                Paragraph::new(Text::from(lines)).block(Block::default().title("Avant exécution").borders(Borders::ALL)).wrap(Wrap { trim: false }),
-                area,
-            );
+            render_plan_preview(frame, root, command, &rows, workspace, selected);
         })?;
-        match event::read()? {
-            Event::Key(key) if matches!(key.code, KeyCode::Enter) => return Ok(true),
-            Event::Key(key) if matches!(key.code, KeyCode::Esc | KeyCode::Char('q')) => {
-                return Ok(false);
+        if let Event::Key(key) = event::read()? {
+            match key.code {
+                KeyCode::Enter => return Ok(true),
+                KeyCode::Esc | KeyCode::Char('q') => return Ok(false),
+                KeyCode::Up => selected = selected.saturating_sub(1),
+                KeyCode::Down => {
+                    selected = selected.saturating_add(1).min(rows.len().saturating_sub(1))
+                }
+                KeyCode::PageUp => selected = selected.saturating_sub(8),
+                KeyCode::PageDown => {
+                    selected = selected.saturating_add(8).min(rows.len().saturating_sub(1))
+                }
+                KeyCode::Home => selected = 0,
+                KeyCode::End => selected = rows.len().saturating_sub(1),
+                _ => {}
             }
-            _ => {}
         }
     }
+}
+
+fn plan_module_rows<'a>(
+    root: &std::path::Path,
+    units: &'a [crate::graph::Unit],
+) -> Vec<(Option<usize>, &'a str)> {
+    let waves = crate::graph::dependency_waves(root, units);
+    let mut rows: Vec<_> = units
+        .iter()
+        .map(|unit| {
+            let key = crate::graph::normalize(root, Path::new(&unit.path));
+            (waves.get(&key).copied().flatten(), unit.path.as_str())
+        })
+        .collect();
+    rows.sort_by(|left, right| {
+        left.0
+            .unwrap_or(usize::MAX)
+            .cmp(&right.0.unwrap_or(usize::MAX))
+            .then_with(|| left.1.cmp(right.1))
+    });
+    rows
+}
+
+fn render_plan_preview(
+    frame: &mut Frame,
+    root: &str,
+    command: &str,
+    rows: &[(Option<usize>, &str)],
+    workspace: &str,
+    selected: usize,
+) {
+    let height = frame.area().height;
+    let header_height = height.saturating_sub(6).min(10);
+    let footer_height = (height / 10).min(2);
+    let module_height = height.saturating_sub(header_height + footer_height);
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(header_height),
+            Constraint::Length(module_height),
+            Constraint::Length(footer_height),
+        ])
+        .split(frame.area());
+    let known_waves = rows
+        .iter()
+        .filter_map(|(wave, _)| *wave)
+        .collect::<std::collections::BTreeSet<_>>();
+    let unknown_count = rows.iter().filter(|(wave, _)| wave.is_none()).count();
+    let summary = Paragraph::new(vec![
+        Line::from(Span::styled(
+            "WAYFINDER · PLAN TERRAGRUNT UNIQUEMENT",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(format!("Racine : {root} · {} unités à lancer", rows.len())),
+        Line::from(format!(
+            "Vagues de dépendances : {} · unités à vague inconnue : {unknown_count}",
+            known_waves.len()
+        )),
+        Line::from(format!("Fichiers temporaires : {workspace}")),
+        Line::from(format!("Commande exacte après confirmation : {command}")),
+        Line::from("Effet : calcul de plans seulement; aucun apply/destroy."),
+        Line::from("VAGUE = niveau de dépendance; ce n'est pas un ordre runtime garanti."),
+    ])
+    .block(
+        Block::default()
+            .title("Avant exécution")
+            .borders(Borders::ALL),
+    )
+    .wrap(Wrap { trim: false });
+    frame.render_widget(summary, sections[0]);
+
+    let items: Vec<ListItem> = rows
+        .iter()
+        .map(|(wave, path)| {
+            let label = wave.map_or_else(
+                || "VAGUE INCONNUE".to_owned(),
+                |number| format!("VAGUE {number}"),
+            );
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    format!("{label:<16}"),
+                    Style::default()
+                        .fg(if wave.is_some() {
+                            Color::Cyan
+                        } else {
+                            Color::Magenta
+                        })
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(*path),
+            ]))
+        })
+        .collect();
+    let mut state = ListState::default();
+    state.select((!items.is_empty()).then_some(selected.min(items.len().saturating_sub(1))));
+    frame.render_stateful_widget(
+        List::new(items)
+            .block(
+                Block::default()
+                    .title(format!(
+                        "Modules à lancer · {}/{}",
+                        selected.saturating_add(1).min(rows.len()),
+                        rows.len()
+                    ))
+                    .borders(Borders::ALL),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol("› "),
+        sections[1],
+        &mut state,
+    );
+    frame.render_widget(
+        Paragraph::new("↑↓ parcourir · PgUp/PgDn · Home/End · Entrée lancer · q/Échap annuler"),
+        sections[2],
+    );
 }
 
 pub fn confirm_cleanup(
@@ -880,6 +992,127 @@ mod tests {
         assert_eq!(state.pane, Pane::Changes);
         state.handle(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE), 1, 1);
         assert_eq!(state.pane, Pane::Changes);
+    }
+
+    #[test]
+    fn preflight_screen_normalizes_dot_and_parent_path_segments_for_wave_lookup() {
+        let units = vec![
+            crate::graph::Unit {
+                path: "./prod/api".into(),
+                dependencies: vec!["../db".into()],
+            },
+            crate::graph::Unit {
+                path: "./prod/db".into(),
+                dependencies: vec![],
+            },
+        ];
+
+        let rows = plan_module_rows(Path::new("/fixture"), &units);
+
+        assert_eq!(rows, [(Some(0), "./prod/db"), (Some(1), "./prod/api")]);
+    }
+
+    #[test]
+    fn preflight_screen_handles_compact_terminal_and_long_module_list() {
+        let units: Vec<_> = (0..40)
+            .map(|index| crate::graph::Unit {
+                path: format!("prod/module-{index:02}"),
+                dependencies: vec![],
+            })
+            .collect();
+        let rows = plan_module_rows(Path::new("/fixture"), &units);
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(60, 14)).unwrap();
+
+        terminal
+            .draw(|frame| {
+                render_plan_preview(
+                    frame,
+                    "/fixture",
+                    "terragrunt run --all plan",
+                    &rows,
+                    "temp-workspace",
+                    39,
+                )
+            })
+            .unwrap();
+
+        let text = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(text.contains("40/40"));
+        assert!(text.contains("prod/module-39"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn preflight_screen_normalizes_windows_separators_and_dot_segments() {
+        let units = vec![
+            crate::graph::Unit {
+                path: r".\prod\api".into(),
+                dependencies: vec![r"..\db".into()],
+            },
+            crate::graph::Unit {
+                path: r".\prod\db".into(),
+                dependencies: vec![],
+            },
+        ];
+
+        let rows = plan_module_rows(Path::new(r"C:\fixture"), &units);
+
+        assert_eq!(rows, [(Some(0), r".\prod\db"), (Some(1), r".\prod\api")]);
+    }
+
+    #[test]
+    fn preflight_screen_lists_all_units_by_wave_and_explains_wave_limits() {
+        let units = vec![
+            crate::graph::Unit {
+                path: "prod/api".into(),
+                dependencies: vec!["../db".into()],
+            },
+            crate::graph::Unit {
+                path: "prod/db".into(),
+                dependencies: vec![],
+            },
+            crate::graph::Unit {
+                path: "prod/orphan".into(),
+                dependencies: vec!["../missing".into()],
+            },
+        ];
+        let rows = plan_module_rows(Path::new("/fixture"), &units);
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 30)).unwrap();
+        terminal
+            .draw(|frame| {
+                render_plan_preview(
+                    frame,
+                    "/fixture",
+                    "terragrunt run --all plan",
+                    &rows,
+                    "temp-workspace",
+                    0,
+                )
+            })
+            .unwrap();
+        let text = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(text.contains("prod/db"));
+        assert!(text.contains("prod/api"));
+        assert!(text.contains("prod/orphan"));
+        assert!(text.contains("VAGUE 0"));
+        assert!(text.contains("VAGUE 1"));
+        assert!(text.contains("VAGUE INCONNUE"));
+        assert!(text.contains("pas un ordre runtime garanti"));
+        assert!(text.contains("3 unités à lancer"));
     }
 
     #[test]
