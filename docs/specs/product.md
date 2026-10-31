@@ -1,38 +1,38 @@
-# Product specification
+# Spécification produit — Terragrunt Wayfinder
 
-## Goal
+## Objectif et frontières
 
-Run one local, read-only Terragrunt `run --all plan`, render a trustworthy global and per-module review, and allow interactive inspection of Terraform/OpenTofu resource actions and before/after values before any later manual apply.
+Fournir une CLI/TUI Rust locale en lecture seule pour découvrir les unités Terragrunt, lancer une unique commande `terragrunt run --all plan`, agréger les résultats structurés, puis permettre une revue interactive des modules, ressources et changements. Wayfinder n’exécute ni `apply` ni `destroy`, n’accepte aucun passthrough de commande et n’utilise aucun service distant. Toute application ultérieure reste une action séparée, manuelle.
 
-## Command contract
+## Contrat d’exécution
 
-- `wayfinder run [--cwd PATH] [--terragrunt PATH] [--output PATH]` discovers the unit scope before execution. In an interactive terminal, Wayfinder displays that scope and waits for an explicit start action. Non-interactive execution prints the scope before running.
-- The only plan invocation is `terragrunt run --all --out-dir <unique-temp>/plans --json-out-dir <unique-temp>/json plan`. No apply, destroy, arbitrary passthrough, or remote API is used.
-- `wayfinder show [--run PATH]` reads a saved, redacted result JSON.
-- Structured resource data is read from per-unit `tfplan.json` files. Console logs are not used to infer resource values.
-- Missing, malformed, errored, or incomplete module output suppresses global totals and returns a nonzero status; partial results are not presented as a complete global plan.
+- `terragrunt-wayfinder run [--cwd PATH] [--terragrunt PATH] [--output PATH]` découvre d’abord les unités et leur graphe par `terragrunt find --dependencies --queue-construct-as=plan --format=json`. Il exige un terminal interactif et présente la commande, la racine, le périmètre, les effets et les limites avant d’attendre une confirmation explicite.
+- Après confirmation, la seule commande de plan est `terragrunt run --all --out-dir <temp>/plans --json-out-dir <temp>/json plan`.
+- `terragrunt-wayfinder show [--run PATH]` lit un JSON de résultat Wayfinder sauvegardé ; il n’exécute aucun plan.
+- Les ressources sont lues exclusivement depuis les fichiers `tfplan.json` par unité. Les journaux ne servent ni à calculer des valeurs/actions/totaux ni à construire les diffs.
+- Sortie manquante, illisible, erreur d’unité, échec de commande ou annulation : résultat incomplet, totaux globaux supprimés, code de sortie non nul. Une annulation identifie explicitement le résultat comme incomplet.
 
-## Result model
+## Modèle de résultat
 
-A result stores schema version, timestamp, exact command, run exit code, completeness, global totals (only meaningful when complete), and modules. A module stores a stable path, status (`planned`, `no_changes`, `failed`, `unknown`), optional counts, and resource changes. Each resource stores address, action sequence, and before/after values; Terraform marks sensitive values as `[REDACTED]` and unknown values as `[UNKNOWN]`. Replacement (`delete` + `create`) is shown explicitly and counted as one addition plus one deletion.
+Le modèle versionné conserve la commande exacte, le code de sortie, la complétude, l’annulation, les totaux (uniquement si tout le run est complet) et les unités. Chaque unité porte un chemin, un statut (`planned`, `no_changes`, `failed`, `unknown`), une vague éventuellement inconnue, des compteurs et des ressources. Chaque ressource porte l’adresse, les actions et les valeurs avant/après. Les champs marqués `*_sensitive` sont remplacés par `[REDACTED]`, les champs `*_unknown` par `[UNKNOWN]`. Une action de remplacement (`delete` + `create`) est affichée `REPLACE`, comptée comme un ajout et une suppression.
 
-## Interactive review
+## Revue interactive
 
-- TUI presents a scope confirmation before executing; progress updates as Terragrunt reports units.
-- After execution, changed modules are listed first; all modules remain searchable. Keyboard navigation opens a module and its resource details.
-- Create, update, delete, and replacement actions are labeled; before/after values are available per resource.
-- Logs are hidden by default and can be shown explicitly. Logs are not saved in the JSON result.
-- The interface warns that Terraform sensitive markers are redacted, but this does not guarantee that logs, unknown values, files, memory, or provider output contain no secrets.
-- Incomplete runs/errors are prominent and never masquerade as successful totals.
+- Un premier écran explique clairement le plan qui sera produit, sa racine, les unités découvertes, la commande exacte et l’absence d’application automatique ; l’utilisateur doit confirmer avant exécution.
+- L’avancement est affiché à mesure que les sorties Terragrunt identifient des unités. `q`, Échap et Ctrl-C interrompent le processus ; les résultats sont incomplets et les fichiers temporaires sont nettoyés.
+- L’interface comporte trois zones Modules → Ressources → Modifications. La flèche droite/Tab avance et compacte les panneaux précédents en contexte/statut ; flèche gauche/Échap revient sans perdre la sélection. Le focus au troisième niveau rend le détail central.
+- Chaque compteur/action porte un texte et un repère visuel : `ADD` vert, `DELETE` rouge, `CHANGE`/`REPLACE` orange, `UNKNOWN` rose/magenta. Le sens doit rester compréhensible sans couleur.
+- Une ressource bascule de façon réversible entre le before/after et un diff unifié ciblé construit depuis les données structurées. Si les valeurs ne permettent pas un diff honnête, l’interface le dit sans inventer.
+- Les modules sont groupés par profondeur des dépendances explicites ; ces vagues décrivent l’éligibilité, pas l’ordre chronologique exact du scheduler concurrent. Graphe manquant ou ambigu : vague inconnue et ordre stable, jamais une déduction depuis les journaux.
+- Recherche clavier, aide visible, journaux masqués par défaut ; les journaux ne sont pas sérialisés dans le résultat.
+- Les erreurs et résultats incomplets ne sont jamais présentés comme un bilan complet.
 
-## Temporary-file lifecycle
+## Cycle de vie temporaire et redaction
 
-Native plans and JSON output are created under a unique `wayfinder-*` temporary directory with an ownership marker. Normal completion and handled interruption clean the directory. A later run detects only marked Wayfinder directories and offers deletion; it never deletes leftovers automatically. A cleanup action requires explicit confirmation in the TUI. Plans are not retained as part of the saved result.
+Plans natifs et JSON résident dans un répertoire temporaire unique portant un marqueur d’appartenance. La fin normale ou l’interruption gérée nettoie ce répertoire. Au démarrage, seuls les restes marqués sont détectés ; la suppression n’est jamais automatique et exige une confirmation distincte. Les plans ne sont jamais conservés dans le résultat exporté.
 
-## Compatibility and validation
+La redaction s’applique aux valeurs sensibles structurées affichées et sauvegardées. L’interface avertit que cette protection ne garantit pas l’absence de secrets dans les journaux, valeurs inconnues, sorties fournisseurs, mémoire ou fichiers natifs temporaires.
 
-Python 3.11+ and Textual are runtime dependencies. Terragrunt must support `run --all`, `--out-dir`, `--json-out-dir`, and unit listing. The exact minimum Terragrunt and Terraform/OpenTofu versions are not yet established because those binaries are unavailable in the agent workspace; the Linux suite uses synthetic fixtures and a simulated Terragrunt executable only. Unsupported flags or unreadable output fail closed. Agent verification is Linux-only; WSL, Git Bash, and PowerShell require manual validation by the user on the delivered revision.
+## Compatibilité et validation
 
-## Safety and assumptions
-
-Wayfinder invokes only plan and read-only inspection paths; it never modifies infrastructure state. Any later apply remains a separate, manual action. The product uses no telemetry or remote service. Do not use a production fixture or transmit real secrets during compatibility testing.
+La crate Rust cible l’édition 2024 et Rust 1.88 minimum, avec versions Cargo épinglées et vérifiées pour Ratatui/Crossterm. Les tests et rendus synthétiques sont exécutés sous Linux. Aucun exécutable Terragrunt, Terraform ou OpenTofu réel n’étant disponible, aucune version minimale de ces outils ni intégration réelle n’est revendiquée ; flags, formats et chemins inconnus doivent échouer de façon conservatrice. Git Bash et PowerShell attendent une validation manuelle après livraison ; WSL reste indisponible selon le dernier retour utilisateur. Aucun déploiement ni publication de binaire n’est autorisé par cette spécification.

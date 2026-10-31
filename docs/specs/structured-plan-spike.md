@@ -25,3 +25,20 @@ Official reference: https://terragrunt.gruntwork.io/docs/reference/cli/commands/
 ## Unresolved compatibility boundary
 
 This implementation requires a Terragrunt version that supports `run --all`, `--out-dir`, `--json-out-dir`, and unit listing. Because no real executable is available, the minimum compatible Terragrunt version, Terraform/OpenTofu versions, and actual path/format behavior are not established here. Unsupported flags or structured output fail closed as an incomplete run. Validate on a real disposable fixture before claiming a Terragrunt version supported; do not plan against production infrastructure for this test.
+
+## Rust migration spike (Linux, synthetic only)
+
+The authorized spike compiled Rust `1.99.1`, `ratatui 0.30.2`, and `crossterm 0.29.0`. A Ratatui `TestBackend` rendered the proposed three panes at 80×24; a synthetic Terraform JSON resource change parsed; a synthetic dependency graph produced dependency-depth groups and rejected a cycle. This was a feasibility probe, not product code or a real Terragrunt/Terraform integration test.
+
+Official documentation reviewed 2026-10-31:
+
+- https://docs.terragrunt.com/features/stacks/run-queue/ — DAG queue semantics, concurrency, per-unit `--out-dir` and `--json-out-dir` outputs.
+- https://docs.terragrunt.com/reference/cli/commands/run/ — `run --all` and JSON plan output flags.
+- https://docs.terragrunt.com/reference/cli/commands/find/ — explicit dependency edges in JSON and queue ordering for plan.
+- https://developer.hashicorp.com/terraform/internals/json-format — Terraform JSON format.
+
+A dependency-depth group can be derived from explicit dependency edges returned by Terragrunt; it is not an execution timestamp or an exact runtime scheduling wave. Concurrency and completion order may vary. Missing/external graph nodes, cycles, malformed metadata, absent plan JSON, or failed runs must be reported as unknown/incomplete, never guessed or represented with complete totals.
+
+Ratatui 0.30.2 and Crossterm 0.29.0 sont maintenant épinglés dans Cargo.toml et Cargo.lock ; le produit Rust les compile sur la toolchain locale. Le rendu synthétique reste une preuve de faisabilité UI, pas une validation de compatibilité avec un terminal Windows.
+
+No real Terragrunt, Terraform/OpenTofu executable, plan, shell compatibility test, or provider interaction was available or performed. WSL remains unavailable per the prior user report; Git Bash and PowerShell remain unverified until the delivered revised build is retested manually. The spike used only synthetic fixtures and disclosed no infrastructure or sensitive data.
