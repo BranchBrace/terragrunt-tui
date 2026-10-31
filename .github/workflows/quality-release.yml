@@ -52,6 +52,18 @@ jobs:
           uv sync --all-extras --dev
           uvx ruff check .
           uv run pytest || [ $? -eq 5 ]
+      - uses: actions-rust-lang/setup-rust-toolchain@ac90e63697ac2784f4ecfe2964e1a285c304003a # v1.14.1
+        if: hashFiles('Cargo.toml') != ''
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - name: Rust
+        if: hashFiles('Cargo.toml') != ''
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets --all-features -- -D warnings
+          cargo test --locked
+          cargo build --locked
   release:
     needs: [semgrep, quality]
     if: github.event_name == 'push'

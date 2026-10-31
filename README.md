@@ -1,76 +1,75 @@
 # Terragrunt Wayfinder
 
-Local, read-only CLI/TUI for reviewing a Terragrunt `run --all plan` across units. It summarizes complete plans and lets you inspect per-resource actions with before/after values. No apply, destroy, telemetry, or remote service.
+CLI/TUI locale et en lecture seule pour préparer et inspecter un `terragrunt run --all plan`. Wayfinder découvre les unités avant l’exécution, montre la commande exacte, puis agrège les changements depuis les JSON de plan structurés. Il n’exécute jamais `apply` ni `destroy` et ne contacte aucun service distant.
 
-## Prerequisites
+## Prérequis et limites de compatibilité
 
-- Python 3.11+ and `uv` (Textual is installed from the project dependency).
-- Terragrunt with support for `run --all`, `--out-dir`, `--json-out-dir`, and `list`.
-- The agent workspace did not include Terragrunt or Terraform/OpenTofu, so no real tool version is claimed as tested. See [the structured-plan spike](docs/specs/structured-plan-spike.md).
+- Rust 1.88+ et Cargo.
+- Terragrunt disposant des commandes `find --dependencies --queue-construct-as=plan --format=json`, `run --all`, `--out-dir` et `--json-out-dir`.
+- Terraform ou OpenTofu compatible avec la génération du JSON de plan par Terragrunt.
+- Aucun binaire Terragrunt/Terraform/OpenTofu réel n’était disponible pour les vérifications de l’agent. Les versions minimales et la compatibilité d’une version Terragrunt donnée ne sont donc pas revendiquées ; seuls les tests Linux synthétiques sont vérifiés ici.
 
-Install the project dependencies from the repository root:
+## Exécuter
 
-```sh
-uv sync
-```
-
-## Run locally
-
-In an interactive terminal:
+Depuis la racine du dépôt, dans un terminal interactif. Remplacer `./fixture-terragrunt-jetable` par le chemin d’une fixture locale jetable (aucune fixture Terragrunt n’est fournie dans le dépôt) :
 
 ```sh
-uv run wayfinder run --cwd ./fixture
+cargo run -- run --cwd ./fixture-terragrunt-jetable
 ```
 
-Wayfinder first shows the discovered unit scope. Press the explicit start button to run the plan. The TUI then provides live module progress, searchable module navigation, resource actions, and before/after details. Logs stay hidden unless you press `l`.
+Wayfinder découvre d’abord les unités puis attend Entrée avant de lancer la commande plan-only affichée à l’écran. `q` ou Échap annule avant l’exécution. Pendant le plan, `q`, Échap ou Ctrl-C interrompent le processus et marquent le résultat incomplet. Après le run, le parcours de revue propose trois panneaux : Modules → Ressources → Modifications.
 
-Non-interactive usage runs after printing the scope:
+Pour ouvrir un résultat Wayfinder déjà sauvegardé :
 
 ```sh
-uv run wayfinder run --cwd ./fixture --output ./wayfinder-result.json
-uv run wayfinder show --run ./wayfinder-result.json
+cargo run -- show --run ./.wayfinder/latest.json
 ```
 
-The saved result contains redacted structured resource data but does not contain raw logs or native plan files. A failed, unreadable, or incomplete run suppresses global totals and returns a nonzero exit code.
+Par défaut, `run` écrit le résultat redacted dans `.wayfinder/latest.json` sans écraser un fichier existant. `--output PATH` choisit un autre chemin ; `show --run PATH` ouvre ce fichier. La commande `run` exige un terminal interactif afin qu’aucun plan ne parte sans confirmation visible.
 
-## Keyboard navigation
+## Navigation clavier
 
-| Key | Action |
+| Touche | Action |
 |---|---|
-| `/` | Focus the module search field. |
-| `m` | Focus the module list; use ↑/↓ to move, with details updating as you move. |
-| `r` | Focus the resource list; use ↑/↓ to inspect before/after values live. |
-| `l` | Show or hide captured logs. |
-| `Esc` | Return focus to module search. |
-| `q` | Quit; if a plan is running, stop its process and clean the temporary run directory. |
+| `→` ou `Tab` | Passer de Modules à Ressources, puis à Modifications ; le panneau quitté se compacte. |
+| `←` ou `Échap` | Revenir au panneau précédent en gardant la sélection. |
+| `↑` / `↓` | Parcourir les éléments du panneau focalisé. |
+| `/` | Rechercher un module ou une ressource ; Entrée valide le filtre, Échap le termine. |
+| `d` | Basculer entre les valeurs before/after et un diff ciblé. |
+| `l` | Afficher ou masquer les journaux du processus en mémoire. Ils sont masqués par défaut et absents du JSON sauvegardé. |
+| `q` | Quitter la revue. |
 
-The footer also displays these shortcuts. Module statuses and resource actions use distinct colors; selection follows the cursor, so Enter is not required for routine browsing.
+Les compteurs ont des libellés textuels et des couleurs : `ADD` vert, `DELETE` rouge, `CHANGE`/`REPLACE` orange, `UNKNOWN` rose/magenta. Le statut reste lisible sans couleur. Le diff est calculé uniquement depuis les données structurées et n’invente rien si le before/after manque.
 
-## Safety and temporary files
+Les groupes `W0`, `W1`, etc. représentent la profondeur du graphe de dépendances explicites découvertes. Ce sont des groupes d’éligibilité, pas l’ordre chronologique exact du scheduler : la concurrence peut changer l’ordre réel. Si la source de dépendances est absente ou ambiguë, Wayfinder affiche une vague inconnue au lieu de la déduire depuis les journaux.
 
-Wayfinder runs only `terragrunt run --all ... plan`; it does not offer apply, destroy, or arbitrary command passthrough. Use a disposable fixture for first runs, and inspect the proposed plan before any separate manual action.
+## Sécurité et fichiers temporaires
 
-Native plan and JSON files live under a unique temporary run directory, which is removed after normal completion or handled interruption. If interrupted abruptly, Wayfinder detects only temporary directories bearing its ownership marker. Interactive cleanup requires a separate confirmation; non-interactive mode reports leftovers but never deletes them automatically.
+Les plans natifs et JSON structurés restent dans un répertoire temporaire marqué, supprimé après fin normale ou interruption gérée. Au démarrage, seuls les restes munis du marqueur Wayfinder sont proposés ; rien n’est supprimé automatiquement et leur nettoyage demande une confirmation distincte. Le JSON sauvegardé ne contient ni fichiers natifs ni journaux bruts.
 
-Terraform-marked sensitive attributes are redacted in structured before/after values. Logs are hidden by default and only available in the current process after pressing `l`. This masking is not a guarantee that logs, unknown values, provider output, memory, or other files contain no secrets.
+Les attributs signalés sensibles par le plan sont masqués dans les valeurs before/after et dans les changements sauvegardés. Cette protection ne garantit pas l’absence de secrets dans les journaux, les sorties fournisseur, les valeurs inconnues, la mémoire ou les fichiers natifs temporaires. Pour une première utilisation, choisir une fixture jetable sans données sensibles et inspecter le plan avant toute action séparée.
 
-## Shell instructions
+## Installation et tests par shell
 
-Run from the repository root in each shell:
+Depuis la racine du dépôt :
 
-- Linux / WSL: `uv run wayfinder run --cwd ./fixture`
-- Git Bash: install `uv` and Terragrunt for that shell, then use the same command.
-- PowerShell: install `uv` and Terragrunt, then run `uv run wayfinder run --cwd .\fixture`.
+- Linux / WSL : `cargo run -- run --cwd ./fixture-terragrunt-jetable`
+- Git Bash : installer Rust/Cargo et Terragrunt pour cet environnement, puis utiliser la même commande.
+- PowerShell : installer Rust/Cargo et Terragrunt, puis `cargo run -- run --cwd .\fixture-terragrunt-jetable`.
 
-Manual results on the previous revision: WSL was unavailable; Git Bash and PowerShell launched and accepted a few keys, but navigation and presentation were not usable. This improved revision has not yet been manually checked. Use only a disposable Terragrunt fixture and no sensitive credentials. For each shell, record OS version and `terragrunt --version`, then verify scope, progress, changed/no-change modules, create/update/delete/replace details, redaction, error handling, keyboard search/navigation, and cleanup. Report skipped shells as untested.
+Dans chaque cas, remplacer ce chemin par la fixture jetable créée localement ; aucune fixture n’est fournie dans le dépôt.
 
-## Linux synthetic checks
+L’agent vérifie uniquement Linux. WSL était indisponible lors du retour précédent ; Git Bash n’a pas été retesté sur la nouvelle version ; l’interface PowerShell était jugée insuffisante sur la version précédente. Ces plateformes ne sont pas revendiquées vérifiées. Après livraison, utiliser seulement une fixture jetable et consigner séparément pour chaque shell les versions, la confirmation, progression, navigation, recherche, changements, erreurs, redaction et nettoyage.
+
+## Vérifications Linux synthétiques
 
 ```sh
-uv run pytest -q
-uv run ruff check src tests
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --locked
+cargo build --locked
 ```
 
-Tests use synthetic JSON and a simulated Terragrunt executable; they do not perform a real infrastructure plan.
+Les tests utilisent un Terragrunt simulé, des JSON synthétiques et le backend terminal de Ratatui ; aucun plan d’infrastructure réel n’est exécuté. Voir `docs/specs/structured-plan-spike.md` pour les limites d’intégration.
 
 Propriétaire, tous droits réservés : voir `LICENSE`.
