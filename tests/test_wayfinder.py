@@ -21,6 +21,15 @@ class ParseOutputTests(unittest.TestCase):
         self.assertEqual((modules[0].added, modules[0].changed, modules[0].destroyed), (2, 1, 0))
         self.assertIn("init complete", modules[0].detail)
 
+    def test_parses_windows_drive_letter_module_headers(self):
+        modules = wayfinder.parse_output([
+            r"Running command: terraform plan in C:\work\prod\app",
+            "Plan: 1 to add, 0 to change, 0 to destroy.",
+        ])
+        self.assertEqual(len(modules), 1)
+        self.assertEqual(modules[0].path, r"C:\work\prod\app")
+        self.assertEqual(modules[0].status, "planned")
+
     def test_parses_module_summaries_and_counts(self):
         modules = wayfinder.parse_output([
             "Running command: terraform plan in ./prod/app",
@@ -95,7 +104,9 @@ class ParseOutputTests(unittest.TestCase):
             missing = Path(directory) / "missing.json"
             invalid = Path(directory) / "invalid.json"
             invalid.write_text("not json", encoding="utf-8")
-            for result_path in (missing, invalid):
+            unsupported = Path(directory) / "unsupported.json"
+            unsupported.write_text('{"schema_version":99}', encoding="utf-8")
+            for result_path in (missing, invalid, unsupported):
                 proc = subprocess.run(
                     [sys.executable, str(script), "show", "--run", str(result_path)],
                     text=True, capture_output=True, check=False,

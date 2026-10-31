@@ -1,35 +1,63 @@
 # Terragrunt Wayfinder
 
-Local read-only CLI/TUI for `terragrunt run --all plan`, aggregation, and per-module drill-down.
+Local, read-only CLI/TUI for reviewing a Terragrunt `run --all plan` across units. It summarizes complete plans and lets you inspect per-resource actions with before/after values. No apply, destroy, telemetry, or remote service.
 
-## Safety boundary
+## Prerequisites
 
-Wayfinder invokes only Terragrunt `plan`; it does not invoke `apply` or `destroy`. Review generated plans before any later action.
+- Python 3.11+ and `uv` (Textual is installed from the project dependency).
+- Terragrunt with support for `run --all`, `--out-dir`, `--json-out-dir`, and `list`.
+- The agent workspace did not include Terragrunt or Terraform/OpenTofu, so no real tool version is claimed as tested. See [the structured-plan spike](docs/specs/structured-plan-spike.md).
+
+Install the project dependencies from the repository root:
+
+```sh
+uv sync
+```
 
 ## Run locally
 
-Requires Python 3.11+ and Terragrunt in `PATH`.
+In an interactive terminal:
 
 ```sh
-python src/wayfinder.py run --cwd .
-python src/wayfinder.py show --run .wayfinder/latest.json
+uv run wayfinder run --cwd ./fixture
 ```
 
-The result JSON is written to `.wayfinder/latest.json`; module details are preserved there. Interactive terminals also offer numbered drill-down.
+Wayfinder first shows the discovered unit scope. Press the explicit start button to run the plan. The TUI then provides live module progress, searchable module navigation, resource actions, and before/after details. Logs stay hidden unless you press `l`.
 
-On Windows shells, use the same Python invocation (`python src/wayfinder.py ...`) from the repository root. Use `py -3` if `python` does not select Python 3.11+. In PowerShell, quote paths containing spaces. WSL uses the Linux instructions. Git Bash uses `python` as configured in that shell.
+Non-interactive usage runs after printing the scope:
 
-## Manual platform validation (not yet verified)
+```sh
+uv run wayfinder run --cwd ./fixture --output ./wayfinder-result.json
+uv run wayfinder show --run ./wayfinder-result.json
+```
 
-For each environment (WSL, Git Bash, PowerShell):
+The saved result contains redacted structured resource data but does not contain raw logs or native plan files. A failed, unreadable, or incomplete run suppresses global totals and returns a nonzero exit code.
 
-1. Install Python 3.11+ and Terragrunt; confirm `python --version` and `terragrunt --version`.
-2. From a disposable Terragrunt fixture, run `python src/wayfinder.py run --cwd <fixture>`.
-3. Confirm the command invokes only `terragrunt run --all plan`, prints totals and per-module status, and writes `.wayfinder/latest.json`.
-4. Confirm a failing module produces a non-zero exit and remains individually inspectable.
-5. Run `python src/wayfinder.py show --run .wayfinder/latest.json`; in an interactive terminal, inspect module details.
-6. Report shell, OS/version, Python/Terragrunt versions, results, and any error output on the Paperclip issue.
+## Safety and temporary files
 
-No agent-side verification has been performed on WSL, Git Bash, or PowerShell.
+Wayfinder runs only `terragrunt run --all ... plan`; it does not offer apply, destroy, or arbitrary command passthrough. Use a disposable fixture for first runs, and inspect the proposed plan before any separate manual action.
+
+Native plan and JSON files live under a unique temporary run directory, which is removed after normal completion or handled interruption. If interrupted abruptly, Wayfinder detects only temporary directories bearing its ownership marker. Interactive cleanup requires a separate confirmation; non-interactive mode reports leftovers but never deletes them automatically.
+
+Terraform-marked sensitive attributes are redacted in structured before/after values. Logs are hidden by default and only available in the current process after pressing `l`. This masking is not a guarantee that logs, unknown values, provider output, memory, or other files contain no secrets.
+
+## Shell instructions
+
+Run from the repository root in each shell:
+
+- Linux / WSL: `uv run wayfinder run --cwd ./fixture`
+- Git Bash: install `uv` and Terragrunt for that shell, then use the same command.
+- PowerShell: install `uv` and Terragrunt, then run `uv run wayfinder run --cwd .\fixture`.
+
+Compatibility with WSL, Git Bash, and PowerShell is not yet manually verified. Use only a disposable Terragrunt fixture and no sensitive credentials. For each shell, record OS version and `terragrunt --version`, then verify scope, progress, changed/no-change modules, create/update/delete/replace details, redaction, error handling, and cleanup. Report skipped shells as untested.
+
+## Linux synthetic checks
+
+```sh
+uv run pytest -q
+uv run ruff check src tests
+```
+
+Tests use synthetic JSON and a simulated Terragrunt executable; they do not perform a real infrastructure plan.
 
 Propriétaire, tous droits réservés : voir `LICENSE`.
