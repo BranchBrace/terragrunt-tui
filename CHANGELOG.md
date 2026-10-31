@@ -3,6 +3,21 @@
 
 ### Bug Fixes
 
+* complete Rust Wayfinder migration ([06cf5e3](https://github.com/MonniHermes/terragrunt-wayfinder/commit/06cf5e38ad832647feb42d58f290e53ba268ba26))
+* fail closed on unknown plan data ([fc2f530](https://github.com/MonniHermes/terragrunt-wayfinder/commit/fc2f5303a108054484fd907dca987c82b2994d47))
+* improve TUI navigation and layout ([3daa2da](https://github.com/MonniHermes/terragrunt-wayfinder/commit/3daa2dae355a2761a8ba14ad28694e569841930b))
+* restore visible TUI search field ([59ad013](https://github.com/MonniHermes/terragrunt-wayfinder/commit/59ad0138bb3295c3375e0be93a624d3afae7502f))
+
+
+### Features
+
+* migrate Wayfinder plan review to Rust ([19971e8](https://github.com/MonniHermes/terragrunt-wayfinder/commit/19971e817a0407de199a2bcd60111d8c1d8cda8b))
+
+# [1.0.0-rc.4](https://github.com/MonniHermes/terragrunt-wayfinder/compare/v1.0.0-rc.3...v1.0.0-rc.4) (2026-10-31)
+
+
+### Bug Fixes
+
 * improve TUI navigation and layout ([3daa2da](https://github.com/MonniHermes/terragrunt-wayfinder/commit/3daa2dae355a2761a8ba14ad28694e569841930b))
 * restore visible TUI search field ([59ad013](https://github.com/MonniHermes/terragrunt-wayfinder/commit/59ad0138bb3295c3375e0be93a624d3afae7502f))
 
