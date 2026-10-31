@@ -67,6 +67,49 @@ def test_tui_shows_redacted_resource_details_and_hides_logs_by_default():
     asyncio.run(exercise())
 
 
+def test_tui_quit_terminates_running_plan_and_cleans_temporary_directory(tmp_path):
+    import asyncio
+    import os
+
+    script = tmp_path / "terragrunt-slow"
+    details_file = tmp_path / "running-plan.txt"
+    script.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os, pathlib, sys, time\n"
+        "args = sys.argv[1:]\n"
+        "if args[0] == 'run':\n"
+        "    temp_root = pathlib.Path(args[args.index('--out-dir') + 1]).parent\n"
+        "    details = pathlib.Path(sys.argv[0]).with_name('running-plan.txt')\n"
+        "    details.write_text(str(os.getpid()) + '\\n' + str(temp_root))\n"
+        "    print('Running command: terraform plan in ./unit-a', flush=True)\n"
+        "    time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    app = WayfinderApp(cwd=tmp_path, terragrunt=str(script), units=["./unit-a"])
+
+    async def exercise():
+        async with app.run_test() as pilot:
+            await pilot.click("#start")
+            for _ in range(100):
+                await pilot.pause(0.05)
+                if details_file.exists():
+                    break
+            assert details_file.exists(), "synthetic plan process did not start"
+            await pilot.press("q")
+            await pilot.pause()
+
+    asyncio.run(exercise())
+    process_id, temp_dir = details_file.read_text(encoding="utf-8").splitlines()
+    try:
+        os.kill(int(process_id), 0)
+    except ProcessLookupError:
+        pass
+    else:
+        raise AssertionError("quitting the TUI left the Terragrunt process alive")
+    assert not Path(temp_dir).exists(), "quitting the TUI left its temporary plan directory"
+
+
 def test_tui_requires_explicit_start_and_executes_synthetic_plan(tmp_path):
     script = tmp_path / "terragrunt"
     script.write_text(

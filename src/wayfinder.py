@@ -231,7 +231,38 @@ def cleanup_stale_temp_dir(path: Path, *, confirmed: bool = False) -> None:
     shutil.rmtree(candidate)
 
 
-def execute_plan(cwd: Path, terragrunt: str, units: list[str] | None = None, on_progress=None) -> RunResult:
+def terminate_process(process: subprocess.Popen[Any], timeout: float = 5) -> None:
+    if process.poll() is None:
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGTERM)
+            elif os.name == "nt":
+                process.send_signal(signal.CTRL_BREAK_EVENT)
+            else:
+                process.terminate()
+        except (OSError, ValueError):
+            if process.poll() is None:
+                process.terminate()
+        try:
+            process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            if os.name == "posix":
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            else:
+                process.kill()
+            process.wait()
+
+
+def execute_plan(
+    cwd: Path,
+    terragrunt: str,
+    units: list[str] | None = None,
+    on_progress=None,
+    on_process=None,
+) -> RunResult:
     units = discover_modules(cwd, terragrunt) if units is None else units
     with TemporaryDirectory(prefix="wayfinder-") as temporary:
         work_dir = Path(temporary)
@@ -250,6 +281,8 @@ def execute_plan(cwd: Path, terragrunt: str, units: list[str] | None = None, on_
             raise RuntimeError(f"Cannot start Terragrunt: {exc}") from exc
         logs: list[str] = []
         assert process.stdout is not None
+        if on_process:
+            on_process(process)
         try:
             for raw in process.stdout:
                 line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
@@ -259,22 +292,11 @@ def execute_plan(cwd: Path, terragrunt: str, units: list[str] | None = None, on_
                     on_progress(header.group(1).rstrip("/\\"))
             exit_code = process.wait()
         except KeyboardInterrupt:
-            if process.poll() is None:
-                if os.name == "posix":
-                    os.killpg(process.pid, signal.SIGTERM)
-                elif os.name == "nt":
-                    process.send_signal(signal.CTRL_BREAK_EVENT)
-                else:
-                    process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    if os.name == "posix":
-                        os.killpg(process.pid, signal.SIGKILL)
-                    else:
-                        process.kill()
-                    process.wait()
+            terminate_process(process)
             raise
+        finally:
+            if on_process:
+                on_process(None)
         modules = parse_output(logs, exit_code)
         by_path = {module_key(module.path, cwd): module for module in modules}
         unit_paths = {module_key(unit, cwd) for unit in units}

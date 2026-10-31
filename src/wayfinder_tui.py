@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import threading
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from textual import on
 from textual.app import App, ComposeResult
@@ -10,6 +12,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Static
+from textual.worker import Worker
 
 from wayfinder import (
     ModuleResult,
@@ -18,6 +21,7 @@ from wayfinder import (
     execute_plan,
     find_stale_temp_dirs,
     result_json,
+    terminate_process,
 )
 
 
@@ -94,6 +98,10 @@ class WayfinderApp(App[None]):
         self.logs_visible = False
         self.run_started = result is not None
         self.stale_dirs = find_stale_temp_dirs() if result is None else []
+        self._cancel_requested = threading.Event()
+        self._process_lock = threading.Lock()
+        self._active_process: subprocess.Popen[Any] | None = None
+        self._run_worker: Worker[None] | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -260,11 +268,37 @@ class WayfinderApp(App[None]):
 
     def _cleanup_result(self, confirmed: bool | None) -> None:
         if confirmed:
-            for path in self.stale_dirs:
-                cleanup_stale_temp_dir(path, confirmed=True)
+            try:
+                for path in self.stale_dirs:
+                    cleanup_stale_temp_dir(path, confirmed=True)
+            except (OSError, ValueError) as exc:
+                self.stale_dirs = find_stale_temp_dirs()
+                self.query_one("#cleanup", Button).disabled = not self.stale_dirs
+                self.query_one("#summary", Static).update(f"Cleanup incomplete: {exc}")
+                return
             self.stale_dirs = find_stale_temp_dirs()
             self.query_one("#cleanup", Button).disabled = not self.stale_dirs
             self.query_one("#summary", Static).update("Confirmed leftover cleanup completed.")
+
+    async def action_quit(self) -> None:
+        self._cancel_requested.set()
+        with self._process_lock:
+            process = self._active_process
+            self._active_process = None
+        if process is not None:
+            terminate_process(process)
+        if self._run_worker is not None:
+            await self._run_worker.wait()
+        self.exit()
+
+    def _set_active_process(self, process: subprocess.Popen[Any] | None) -> None:
+        with self._process_lock:
+            self._active_process = process
+            stop_now = process is not None and self._cancel_requested.is_set()
+            if stop_now:
+                self._active_process = None
+        if stop_now and process is not None:
+            terminate_process(process)
 
     @on(Button.Pressed, "#quit")
     def quit_from_scope(self) -> None:
@@ -276,20 +310,28 @@ class WayfinderApp(App[None]):
             return
         self.run_started = True
         self.refresh(recompose=True)
-        self.run_worker(self._run_in_thread, thread=True, exclusive=True)
+        self._run_worker = self.run_worker(self._run_in_thread, thread=True, exclusive=True)
 
     def _run_in_thread(self) -> None:
         assert self.cwd is not None
         def progress(path: str) -> None:
             self.call_from_thread(self._set_progress, path)
         try:
-            result = execute_plan(self.cwd, self.terragrunt, self.units, on_progress=progress)
-            if self.output:
+            result = execute_plan(
+                self.cwd,
+                self.terragrunt,
+                self.units,
+                on_progress=progress,
+                on_process=self._set_active_process,
+            )
+            if self.output and not self._cancel_requested.is_set():
                 self.output.parent.mkdir(parents=True, exist_ok=True)
                 self.output.write_text(result_json(result) + "\n", encoding="utf-8")
-            self.call_from_thread(self._finish_run, result)
+            if not self._cancel_requested.is_set():
+                self.call_from_thread(self._finish_run, result)
         except (OSError, RuntimeError) as exc:
-            self.call_from_thread(self._fail_run, str(exc))
+            if not self._cancel_requested.is_set():
+                self.call_from_thread(self._fail_run, str(exc))
 
     def _set_progress(self, path: str) -> None:
         self.query_one("#summary", Static).update(f"Planning: {path}")
