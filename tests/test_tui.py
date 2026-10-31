@@ -67,9 +67,20 @@ def test_tui_shows_redacted_resource_details_and_hides_logs_by_default():
     asyncio.run(exercise())
 
 
-def test_tui_quit_terminates_running_plan_and_cleans_temporary_directory(tmp_path):
+def test_tui_quit_terminates_running_plan_and_cleans_temporary_directory(tmp_path, monkeypatch):
     import asyncio
     import os
+
+    from wayfinder_tui import terminate_process
+
+    terminated = []
+    original_terminate = terminate_process
+
+    def record_termination(process):
+        terminated.append(process.pid)
+        original_terminate(process)
+
+    monkeypatch.setattr("wayfinder_tui.terminate_process", record_termination)
 
     script = tmp_path / "terragrunt-slow"
     details_file = tmp_path / "running-plan.txt"
@@ -101,6 +112,7 @@ def test_tui_quit_terminates_running_plan_and_cleans_temporary_directory(tmp_pat
 
     asyncio.run(exercise())
     process_id, temp_dir = details_file.read_text(encoding="utf-8").splitlines()
+    assert terminated == [int(process_id)], "quitting the TUI did not invoke process-group termination"
     try:
         os.kill(int(process_id), 0)
     except ProcessLookupError:
