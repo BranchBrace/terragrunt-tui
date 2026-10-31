@@ -71,7 +71,7 @@ class WayfinderApp(App[None]):
     #modules { width: 42%; min-width: 28; border: round $primary; }
     #review { width: 1fr; min-width: 32; border: round $secondary; }
     #module-heading, #module-status { height: 1; padding: 0 1; content-align: left middle; text-style: bold; }
-    #search { height: 1; margin: 0 1; }
+    #search { height: 1; margin: 0 1; border: none; }
     #module-table, #resource-table { height: 1fr; min-height: 3; }
     #resource-values { height: 1fr; min-height: 4; }
     #before, #after { width: 1fr; min-width: 12; padding: 1; overflow: auto; border: round $secondary; }

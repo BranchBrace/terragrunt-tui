@@ -44,6 +44,8 @@ def test_tui_shows_redacted_resource_details_and_hides_logs_by_default():
     async def exercise():
         async with app.run_test() as pilot:
             await pilot.pause()
+            search = app.query_one("#search", Input)
+            assert search.content_region.height > 0
             assert app.query_one("#module-table", DataTable).row_count == 1
             resource_table = app.query_one("#resource-table", DataTable)
             assert resource_table.row_count == 4
