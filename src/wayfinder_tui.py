@@ -6,6 +6,7 @@ import threading
 from pathlib import Path
 from typing import Any, ClassVar
 
+from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -60,21 +61,31 @@ class WayfinderApp(App[None]):
     TITLE = "Terragrunt Wayfinder"
     SUB_TITLE = "Plan review only — no apply"
     CSS = """
-    #notice { height: 3; padding: 0 1; background: $warning 20%; }
-    #summary { height: 2; padding: 0 1; }
-    #scope { height: 1fr; padding: 1; border: round $primary; }
-    #modules { width: 34%; border: round $primary; }
-    #review { width: 66%; border: round $primary; }
-    #module-table, #resource-table { height: 1fr; }
-    #resource-values { height: 10; }
-    #before, #after { width: 1fr; overflow: auto; border: round $secondary; }
-    #logs { height: 1fr; overflow: auto; border: round $warning; }
+    Screen { layout: vertical; }
+    Header { height: 1; }
+    Footer { height: 1; }
+    #notice { height: auto; min-height: 1; max-height: 2; padding: 0 1; background: $warning 20%; }
+    #summary { height: 1; padding: 0 1; content-align: left middle; text-style: bold; }
+    #scope { height: 1fr; min-height: 4; padding: 1 2; border: round $primary; overflow: auto; }
+    #body { height: 1fr; min-height: 4; }
+    #modules { width: 42%; min-width: 28; border: round $primary; }
+    #review { width: 1fr; min-width: 32; border: round $secondary; }
+    #module-heading, #module-status { height: 1; padding: 0 1; content-align: left middle; text-style: bold; }
+    #search { height: 1; margin: 0 1; }
+    #module-table, #resource-table { height: 1fr; min-height: 3; }
+    #resource-values { height: 1fr; min-height: 4; }
+    #before, #after { width: 1fr; min-width: 12; padding: 1; overflow: auto; border: round $secondary; }
+    #logs { height: 1fr; min-height: 4; padding: 1; overflow: auto; border: round $warning; }
     #actions { height: 3; }
+    Button { margin: 0 1; }
     """
     BINDINGS: ClassVar = [
         ("enter", "open_detail", "Open resource"),
         ("escape", "back", "Back"),
-        Binding("l", "toggle_logs", "Toggle logs", priority=True),
+        Binding("l", "toggle_logs", "Logs"),
+        Binding("m", "focus_modules", "Modules"),
+        Binding("r", "focus_resources", "Resources"),
+        Binding("/", "focus_search", "Search"),
         ("q", "quit", "Quit"),
     ]
 
@@ -146,6 +157,7 @@ class WayfinderApp(App[None]):
         self._initialize_tables()
         self._refresh_summary()
         self._show_logs()
+        self.query_one("#module-table", DataTable).focus()
 
     def _initialize_tables(self) -> None:
         modules = self.query_one("#module-table", DataTable)
@@ -159,7 +171,7 @@ class WayfinderApp(App[None]):
         if not self.result:
             return
         if self.result.complete:
-            message = f"Complete: +{self.result.added}  ~{self.result.changed}  -{self.result.destroyed}"
+            message = f"COMPLETE · {len(self.result.modules)} modules · +{self.result.added}  ~{self.result.changed}  -{self.result.destroyed}"
         else:
             message = "INCOMPLETE — global totals suppressed; inspect failed/unknown modules."
         self.query_one("#summary", Static).update(message)
@@ -177,14 +189,34 @@ class WayfinderApp(App[None]):
         self.filtered_modules = [module for module in self.filtered_modules if needle in module.path.casefold()]
         for module in self.filtered_modules:
             counts = "unknown" if module.added is None else f"+{module.added} ~{module.changed} -{module.destroyed}"
-            table.add_row(module.path, module.status, counts, key=module.path)
-        if self.filtered_modules and not self.active_module:
-            table.move_cursor(row=0)
-            self._select_module(self.filtered_modules[0])
+            status_style = {
+                "planned": "bold green",
+                "no_changes": "dim",
+                "failed": "bold red",
+                "unknown": "bold yellow",
+            }.get(module.status, "")
+            table.add_row(module.path, Text(module.status.replace("_", " ").upper(), style=status_style), counts, key=module.path)
+        if self.filtered_modules:
+            selected_module = self.active_module if self.active_module in self.filtered_modules else self.filtered_modules[0]
+            table.move_cursor(row=self.filtered_modules.index(selected_module))
+            if selected_module is not self.active_module:
+                self._select_module(selected_module)
+        else:
+            self.active_module = None
+            self.query_one("#module-status", Static).update("No modules match the search.")
+            self.query_one("#resource-table", DataTable).clear()
+            self.query_one("#before", Static).update("Before\n—")
+            self.query_one("#after", Static).update("After\n—")
 
     @on(Input.Changed, "#search")
     def filter_modules(self, event: Input.Changed) -> None:
         self._refresh_modules(event.value)
+
+    @on(DataTable.RowHighlighted, "#module-table")
+    def module_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        module = next((item for item in self.filtered_modules if item.path == str(event.row_key.value)), None)
+        if module:
+            self._select_module(module)
 
     @on(DataTable.RowSelected, "#module-table")
     def module_selected(self, event: DataTable.RowSelected) -> None:
@@ -212,13 +244,29 @@ class WayfinderApp(App[None]):
                 action_text = "UPDATE"
             else:
                 action_text = "NO CHANGE"
-            table.add_row(str(resource.get("address", "<unknown>")), action_text, key=str(index))
+            action_style = {
+                "CREATE": "bold green",
+                "UPDATE": "bold yellow",
+                "DELETE": "bold red",
+                "REPLACE": "bold magenta",
+                "NO CHANGE": "dim",
+            }[action_text]
+            table.add_row(str(resource.get("address", "<unknown>")), Text(action_text, style=action_style), key=str(index))
         if module.resources:
             table.move_cursor(row=0)
             self._select_resource(0)
         else:
             self.query_one("#before", Static).update("Before\nNo structured resource changes.")
             self.query_one("#after", Static).update("After\nNo structured resource changes.")
+
+    @on(DataTable.RowHighlighted, "#resource-table")
+    def resource_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        if event.row_key.value is None:
+            return
+        try:
+            self._select_resource(int(event.row_key.value))
+        except (TypeError, ValueError):
+            return
 
     @on(DataTable.RowSelected, "#resource-table")
     def resource_selected(self, event: DataTable.RowSelected) -> None:
@@ -241,8 +289,17 @@ class WayfinderApp(App[None]):
         if table.row_count:
             self._select_resource(table.cursor_row)
 
-    async def action_back(self) -> None:
+    def action_focus_modules(self) -> None:
+        self.query_one("#module-table", DataTable).focus()
+
+    def action_focus_resources(self) -> None:
+        self.query_one("#resource-table", DataTable).focus()
+
+    def action_focus_search(self) -> None:
         self.query_one("#search", Input).focus()
+
+    async def action_back(self) -> None:
+        self.action_focus_search()
 
     @on(Button.Pressed, "#toggle-logs")
     def toggle_logs_button(self) -> None:

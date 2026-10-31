@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-from textual.widgets import DataTable, Static
+from textual.widgets import DataTable, Input, Static
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
@@ -58,9 +58,65 @@ def test_tui_shows_redacted_resource_details_and_hides_logs_by_default():
             await pilot.pause()
             assert "synthetic raw log" in str(logs.render())
             await pilot.click("#search")
-            await pilot.press("x", "y", "z")
+            await pilot.press("m")
             await pilot.pause()
             assert app.query_one("#module-table", DataTable).row_count == 0
+            assert "No modules match" in str(app.query_one("#module-status", Static).render())
+            await pilot.press("backspace")
+            await pilot.press("p", "r", "o", "d")
+            await pilot.pause()
+            assert app.query_one("#module-table", DataTable).row_count == 1, app.query_one("#search", Input).value
+
+    import asyncio
+
+    asyncio.run(exercise())
+
+
+def test_tui_arrow_navigation_updates_module_and_resource_details():
+    first = wayfinder.ModuleResult(
+        path="./prod/app",
+        status="planned",
+        added=1,
+        changed=0,
+        destroyed=0,
+        resources=[
+            {"address": "aws_instance.web", "actions": ["create"], "before": None, "after": {"name": "web"}},
+            {"address": "aws_instance.db", "actions": ["update"], "before": {"size": "small"}, "after": {"size": "large"}},
+        ],
+    )
+    second = wayfinder.ModuleResult(
+        path="./prod/db",
+        status="planned",
+        added=0,
+        changed=1,
+        destroyed=0,
+        resources=[
+            {"address": "aws_db_instance.main", "actions": ["update"], "before": {"size": "db.t3"}, "after": {"size": "db.t4"}},
+        ],
+    )
+    result = wayfinder.RunResult(
+        timestamp="synthetic",
+        command=["terragrunt", "run", "--all", "plan"],
+        exit_code=0,
+        added=1,
+        changed=1,
+        destroyed=0,
+        modules=[first, second],
+        complete=True,
+    )
+    app = WayfinderApp(result)
+
+    async def exercise():
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            assert app.query_one("#before", Static).region.right <= app.size.width
+            assert app.query_one("#after", Static).region.bottom <= app.size.height
+            await pilot.press("down")
+            await pilot.pause()
+            assert "./prod/db" in str(app.query_one("#module-status", Static).render())
+            await pilot.press("m", "up", "r", "down")
+            await pilot.pause()
+            assert "large" in str(app.query_one("#after", Static).render())
 
     import asyncio
 
