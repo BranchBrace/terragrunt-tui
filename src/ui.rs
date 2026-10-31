@@ -50,7 +50,7 @@ pub fn confirm_plan(
     let mut selected = 0usize;
     loop {
         terminal.draw(|frame| {
-            render_plan_preview(frame, root, command, units, workspace, selected);
+            render_plan_preview(frame, root, command, &rows, workspace, selected);
         })?;
         if let Event::Key(key) = event::read()? {
             match key.code {
@@ -80,12 +80,7 @@ fn plan_module_rows<'a>(
     let mut rows: Vec<_> = units
         .iter()
         .map(|unit| {
-            let path = std::path::Path::new(&unit.path);
-            let key = if path.is_absolute() {
-                path.to_string_lossy().replace('\\', "/")
-            } else {
-                root.join(path).to_string_lossy().replace('\\', "/")
-            };
+            let key = crate::graph::normalize(root, Path::new(&unit.path));
             (waves.get(&key).copied().flatten(), unit.path.as_str())
         })
         .collect();
@@ -102,17 +97,20 @@ fn render_plan_preview(
     frame: &mut Frame,
     root: &str,
     command: &str,
-    units: &[crate::graph::Unit],
+    rows: &[(Option<usize>, &str)],
     workspace: &str,
     selected: usize,
 ) {
-    let rows = plan_module_rows(std::path::Path::new(root), units);
+    let height = frame.area().height;
+    let header_height = height.saturating_sub(6).min(10);
+    let footer_height = (height / 10).min(2);
+    let module_height = height.saturating_sub(header_height + footer_height);
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(10),
-            Constraint::Min(5),
-            Constraint::Length(2),
+            Constraint::Length(header_height),
+            Constraint::Length(module_height),
+            Constraint::Length(footer_height),
         ])
         .split(frame.area());
     let known_waves = rows
@@ -127,7 +125,7 @@ fn render_plan_preview(
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from(format!("Racine : {root} · {} unités à lancer", units.len())),
+        Line::from(format!("Racine : {root} · {} unités à lancer", rows.len())),
         Line::from(format!(
             "Vagues de dépendances : {} · unités à vague inconnue : {unknown_count}",
             known_waves.len()
@@ -175,8 +173,8 @@ fn render_plan_preview(
                 Block::default()
                     .title(format!(
                         "Modules à lancer · {}/{}",
-                        selected.saturating_add(1).min(units.len()),
-                        units.len()
+                        selected.saturating_add(1).min(rows.len()),
+                        rows.len()
                     ))
                     .borders(Borders::ALL),
             )
@@ -997,6 +995,79 @@ mod tests {
     }
 
     #[test]
+    fn preflight_screen_normalizes_dot_and_parent_path_segments_for_wave_lookup() {
+        let units = vec![
+            crate::graph::Unit {
+                path: "./prod/api".into(),
+                dependencies: vec!["../db".into()],
+            },
+            crate::graph::Unit {
+                path: "./prod/db".into(),
+                dependencies: vec![],
+            },
+        ];
+
+        let rows = plan_module_rows(Path::new("/fixture"), &units);
+
+        assert_eq!(rows, [(Some(0), "./prod/db"), (Some(1), "./prod/api")]);
+    }
+
+    #[test]
+    fn preflight_screen_handles_compact_terminal_and_long_module_list() {
+        let units: Vec<_> = (0..40)
+            .map(|index| crate::graph::Unit {
+                path: format!("prod/module-{index:02}"),
+                dependencies: vec![],
+            })
+            .collect();
+        let rows = plan_module_rows(Path::new("/fixture"), &units);
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(60, 14)).unwrap();
+
+        terminal
+            .draw(|frame| {
+                render_plan_preview(
+                    frame,
+                    "/fixture",
+                    "terragrunt run --all plan",
+                    &rows,
+                    "temp-workspace",
+                    39,
+                )
+            })
+            .unwrap();
+
+        let text = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(text.contains("40/40"));
+        assert!(text.contains("prod/module-39"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn preflight_screen_normalizes_windows_separators_and_dot_segments() {
+        let units = vec![
+            crate::graph::Unit {
+                path: r".\prod\api".into(),
+                dependencies: vec![r"..\db".into()],
+            },
+            crate::graph::Unit {
+                path: r".\prod\db".into(),
+                dependencies: vec![],
+            },
+        ];
+
+        let rows = plan_module_rows(Path::new(r"C:\fixture"), &units);
+
+        assert_eq!(rows, [(Some(0), r".\prod\db"), (Some(1), r".\prod\api")]);
+    }
+
+    #[test]
     fn preflight_screen_lists_all_units_by_wave_and_explains_wave_limits() {
         let units = vec![
             crate::graph::Unit {
@@ -1012,6 +1083,7 @@ mod tests {
                 dependencies: vec!["../missing".into()],
             },
         ];
+        let rows = plan_module_rows(Path::new("/fixture"), &units);
         let mut terminal =
             ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 30)).unwrap();
         terminal
@@ -1020,7 +1092,7 @@ mod tests {
                     frame,
                     "/fixture",
                     "terragrunt run --all plan",
-                    &units,
+                    &rows,
                     "temp-workspace",
                     0,
                 )
