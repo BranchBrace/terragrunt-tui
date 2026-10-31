@@ -5,13 +5,16 @@ description = "Local read-only Terragrunt plan aggregator CLI and TUI"
 requires-python = ">=3.11"
 license = "LicenseRef-Proprietary"
 classifiers = ["Private :: Do Not Upload"]
+dependencies = [
+    "textual>=0.80",
+]
 
 [project.scripts]
 wayfinder = "wayfinder:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = ["wayfinder"]
+py-modules = ["wayfinder", "wayfinder_tui"]
 
 [build-system]
 requires = ["setuptools>=68"]
