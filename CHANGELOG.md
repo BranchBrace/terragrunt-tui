@@ -1,3 +1,11 @@
+# [1.0.0-rc.4](https://github.com/MonniHermes/terragrunt-wayfinder/compare/v1.0.0-rc.3...v1.0.0-rc.4) (2026-10-31)
+
+
+### Bug Fixes
+
+* improve TUI navigation and layout ([3daa2da](https://github.com/MonniHermes/terragrunt-wayfinder/commit/3daa2dae355a2761a8ba14ad28694e569841930b))
+* restore visible TUI search field ([59ad013](https://github.com/MonniHermes/terragrunt-wayfinder/commit/59ad0138bb3295c3375e0be93a624d3afae7502f))
+
 # [1.0.0-rc.3](https://github.com/MonniHermes/terragrunt-wayfinder/compare/v1.0.0-rc.2...v1.0.0-rc.3) (2026-10-31)
 
 
