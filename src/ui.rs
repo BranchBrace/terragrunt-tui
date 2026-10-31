@@ -674,6 +674,7 @@ fn flatten(prefix: &str, value: &serde_json::Value, output: &mut BTreeMap<String
                 flatten(&format!("{prefix}[{index}]"), child, output);
             }
         }
+        _ if prefix.is_empty() => {}
         _ => {
             output.insert(prefix.to_owned(), value.to_string());
         }
@@ -736,6 +737,34 @@ mod tests {
         assert_eq!(counter.spans[0].style.fg, Some(Color::Green));
         assert_eq!(counter.spans[1].style.fg, Some(Color::Rgb(255, 165, 0)));
         assert_eq!(counter.spans[2].style.fg, Some(Color::Red));
+    }
+
+    #[test]
+    fn create_and_delete_diffs_omit_unnamed_null_root_values() {
+        let create = ResourceChange {
+            address: "thing.created".into(),
+            actions: vec!["create".into()],
+            before: serde_json::Value::Null,
+            after: serde_json::json!({"name":"value"}),
+        };
+        let delete = ResourceChange {
+            address: "thing.deleted".into(),
+            actions: vec!["delete".into()],
+            before: serde_json::json!({"name":"value"}),
+            after: serde_json::Value::Null,
+        };
+
+        let create_lines = diff_lines(&create)
+            .into_iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>();
+        let delete_lines = diff_lines(&delete)
+            .into_iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(create_lines, [r#"+ name = "value""#]);
+        assert_eq!(delete_lines, [r#"- name = "value""#]);
     }
 
     #[test]

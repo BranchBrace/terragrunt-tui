@@ -135,6 +135,7 @@ fn resolve_dependency(
         return normalize(root, dependency_path);
     }
     let root_relative = normalize(root, &root.join(dependency_path));
+    // Terragrunt discovery may emit root-relative paths or legacy unit-relative paths.
     if known_units.contains(&root_relative) {
         return root_relative;
     }
@@ -187,6 +188,22 @@ mod tests {
         assert_eq!(waves["/fixture/metrics"], Some(0));
         assert_eq!(waves["/fixture/database"], Some(1));
         assert_eq!(waves["/fixture/service"], Some(2));
+    }
+
+    #[test]
+    fn resolves_root_relative_dependency_paths() {
+        let units = parse_units(
+            r#"[
+          {"type":"unit","path":"live/dev/vpc","dependencies":[]},
+          {"type":"unit","path":"live/dev/app","dependencies":["live/dev/vpc"]}
+        ]"#,
+        )
+        .unwrap();
+
+        let waves = dependency_waves(Path::new("/fixture"), &units);
+
+        assert_eq!(waves["/fixture/live/dev/vpc"], Some(0));
+        assert_eq!(waves["/fixture/live/dev/app"], Some(1));
     }
 
     #[test]

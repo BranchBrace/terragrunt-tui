@@ -156,16 +156,15 @@ where
     let root = root.canonicalize()?;
     fs::create_dir_all(&workspace.plan_dir)?;
     fs::create_dir_all(&workspace.json_dir)?;
-    let plan_dir = &workspace.plan_dir;
     let json_dir = &workspace.json_dir;
     let command = workspace.command(terragrunt);
-    let mut command_runner = Command::new(terragrunt);
+    let mut command_parts = command.iter().cloned();
+    let executable = command_parts
+        .next()
+        .ok_or_else(|| EngineError::Invalid("empty Terragrunt plan command".into()))?;
+    let mut command_runner = Command::new(executable);
     command_runner
-        .args(["run", "--all", "--out-dir"])
-        .arg(plan_dir)
-        .arg("--json-out-dir")
-        .arg(json_dir)
-        .arg("plan")
+        .args(command_parts)
         .current_dir(&root)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

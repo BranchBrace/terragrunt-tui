@@ -114,8 +114,10 @@ fn run(
         return Err(error.into());
     }
     let output_path = output.unwrap_or_else(|| PathBuf::from(".wayfinder/latest.json"));
-    save_result(&output_path, &result)?;
-    ui::review(&mut session.terminal, &result)?;
+    persist_and_review(
+        || save_result(&output_path, &result),
+        || ui::review(&mut session.terminal, &result).map_err(Into::into),
+    )?;
     Ok(if result.complete {
         0
     } else if result.exit_code != 0 {
@@ -197,6 +199,19 @@ fn save_result(path: &Path, result: &model::RunResult) -> Result<(), Box<dyn std
     Ok(())
 }
 
+fn persist_and_review<S, R>(save: S, review: R) -> Result<(), Box<dyn std::error::Error>>
+where
+    S: FnOnce() -> Result<(), Box<dyn std::error::Error>>,
+    R: FnOnce() -> Result<(), Box<dyn std::error::Error>>,
+{
+    let save_error = save().err();
+    review()?;
+    if let Some(error) = save_error {
+        return Err(error);
+    }
+    Ok(())
+}
+
 fn print_summary(result: &model::RunResult) {
     if result.cancelled {
         println!("ANNULE / INCOMPLET · totaux globaux masqués");
@@ -217,5 +232,48 @@ fn print_summary(result: &model::RunResult) {
             module.path,
             module.status.to_uppercase()
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn existing_result_file_does_not_prevent_review() {
+        let directory = tempfile::tempdir().unwrap();
+        let output = directory.path().join("latest.json");
+        fs::write(&output, "previous-result").unwrap();
+        let result = model::RunResult {
+            schema_version: 1,
+            command: vec![
+                "terragrunt".into(),
+                "run".into(),
+                "--all".into(),
+                "plan".into(),
+            ],
+            exit_code: 0,
+            complete: true,
+            cancelled: false,
+            totals: Some(model::Totals {
+                added: 1,
+                changed: 0,
+                deleted: 0,
+            }),
+            modules: Vec::new(),
+        };
+        let mut reviewed = false;
+
+        let outcome = persist_and_review(
+            || save_result(&output, &result),
+            || {
+                reviewed = true;
+                Ok(())
+            },
+        );
+
+        assert!(reviewed, "the result review must run after save failure");
+        assert!(outcome.is_err(), "the save failure must remain visible");
+        assert_eq!(fs::read_to_string(output).unwrap(), "previous-result");
     }
 }
