@@ -48,13 +48,13 @@ pub fn confirm_plan(
 ) -> io::Result<bool> {
     let rows = plan_module_rows(Path::new(root), units);
     let mut selected = 0usize;
-    let mut last_navigation_repeat = None;
+    let mut navigation_pacer = NavigationPacer::default();
     loop {
         terminal.draw(|frame| {
             render_plan_preview(frame, root, command, &rows, workspace, selected);
         })?;
         if let Event::Key(key) = event::read()?
-            && navigation_event_allowed(key, &mut last_navigation_repeat, std::time::Instant::now())
+            && navigation_pacer.allows(key, std::time::Instant::now())
         {
             match key.code {
                 KeyCode::Enter => return Ok(true),
@@ -226,11 +226,16 @@ pub fn confirm_cleanup(
             );
         })?;
         match event::read()? {
-            Event::Key(key) if key.code == KeyCode::Char('y') => return Ok(true),
-            Event::Key(_) => return Ok(false),
+            Event::Key(key) if let Some(confirmed) = cleanup_confirmation(key) => {
+                return Ok(confirmed);
+            }
             _ => {}
         }
     }
+}
+
+fn cleanup_confirmation(key: KeyEvent) -> Option<bool> {
+    (key.kind == KeyEventKind::Press).then_some(key.code == KeyCode::Char('y'))
 }
 
 pub fn show_progress(
@@ -385,26 +390,39 @@ impl ReviewState {
     }
 }
 
-fn navigation_event_allowed(
-    key: KeyEvent,
-    last_repeat: &mut Option<std::time::Instant>,
-    now: std::time::Instant,
-) -> bool {
-    let is_navigation = matches!(key.code, KeyCode::Up | KeyCode::Down);
-    if !is_navigation {
-        return true;
-    }
-    if key.kind != KeyEventKind::Repeat {
-        *last_repeat = None;
-        return true;
-    }
+#[derive(Default)]
+struct NavigationPacer {
+    last_event: Option<(KeyCode, std::time::Instant)>,
+    last_allowed: Option<std::time::Instant>,
+}
 
-    let delay = std::time::Duration::from_millis(180);
-    if last_repeat.is_some_and(|last| now.duration_since(last) < delay) {
-        return false;
+impl NavigationPacer {
+    fn allows(&mut self, key: KeyEvent, now: std::time::Instant) -> bool {
+        if key.kind == KeyEventKind::Release {
+            return false;
+        }
+        if !matches!(key.code, KeyCode::Up | KeyCode::Down) {
+            return key.kind == KeyEventKind::Press;
+        }
+
+        let delay = std::time::Duration::from_millis(180);
+        let repeat_window = std::time::Duration::from_millis(80);
+        let is_repeat = key.kind == KeyEventKind::Repeat
+            || self.last_event.is_some_and(|(code, last)| {
+                code == key.code && now.duration_since(last) < repeat_window
+            });
+        self.last_event = Some((key.code, now));
+
+        if is_repeat
+            && self
+                .last_allowed
+                .is_some_and(|last| now.duration_since(last) < delay)
+        {
+            return false;
+        }
+        self.last_allowed = Some(now);
+        true
     }
-    *last_repeat = Some(now);
-    true
 }
 
 pub fn review(
@@ -412,7 +430,7 @@ pub fn review(
     result: &RunResult,
 ) -> io::Result<()> {
     let mut state = ReviewState::default();
-    let mut last_navigation_repeat = None;
+    let mut navigation_pacer = NavigationPacer::default();
     loop {
         let visible_modules = visible_modules(result, &state.search);
         state.module = state.module.min(visible_modules.len().saturating_sub(1));
@@ -439,15 +457,15 @@ pub fn review(
             return Ok(());
         }
         if let Event::Key(key) = event::read()? {
+            if !navigation_pacer.allows(key, std::time::Instant::now()) {
+                continue;
+            }
             if !state.searching && key.code == KeyCode::Char('/') {
                 state.searching = true;
                 continue;
             }
             let resource_count = visible_resources.len();
-            if navigation_event_allowed(key, &mut last_navigation_repeat, std::time::Instant::now())
-            {
-                state.handle(key, visible_modules.len(), resource_count);
-            }
+            state.handle(key, visible_modules.len(), resource_count);
         }
     }
 }
@@ -514,60 +532,58 @@ fn render_review(
         .constraints(widths)
         .split(rows[0]);
 
-    let module_items: Vec<ListItem> = modules
-        .iter()
-        .enumerate()
-        .map(|(position, index)| {
-            let item = &result.modules[*index];
-            let marker = item.wave.map_or("W?".into(), |wave| format!("W{wave}"));
-            let starts_wave = position == 0
-                || result.modules[modules[position.saturating_sub(1)]].wave != item.wave;
-            let mut lines = if state.pane == Pane::Modules {
-                let mut lines = Vec::new();
-                if starts_wave {
-                    let heading = item.wave.map_or_else(
-                        || "━━ VAGUE INCONNUE ━━".to_owned(),
-                        |wave| format!("━━ VAGUE {wave} ━━"),
-                    );
-                    lines.push(Line::from(Span::styled(
-                        heading,
-                        Style::default()
-                            .fg(item.wave.map_or(Color::Magenta, wave_color))
-                            .add_modifier(Modifier::BOLD),
-                    )));
-                }
-                lines.extend([
-                    Line::from(vec![
-                        Span::styled(
-                            format!("{marker} "),
-                            Style::default().fg(item.wave.map_or(Color::Magenta, wave_color)),
-                        ),
-                        Span::styled(status_label(item), status_style(&item.status)),
-                    ]),
-                    Line::from(item.path.clone()),
-                ]);
-                lines
-            } else {
-                let module_name = item
-                    .path
-                    .rsplit(|character| character == '/' || character == char::from(92))
-                    .next()
-                    .unwrap_or(&item.path);
-                vec![
-                    Line::from(Span::styled(status_label(item), status_style(&item.status))),
-                    Line::from(format!("{marker} {module_name}")),
-                ]
-            };
-            if state.pane == Pane::Modules
-                && let Some(totals) = &item.totals
-            {
-                lines.push(counter_line(totals));
-            }
-            ListItem::new(lines)
-        })
-        .collect();
+    let mut module_items = Vec::new();
+    let mut module_selection_rows = Vec::with_capacity(modules.len());
+    for (position, index) in modules.iter().enumerate() {
+        let item = &result.modules[*index];
+        let marker = item.wave.map_or("W?".into(), |wave| format!("W{wave}"));
+        let starts_wave =
+            position == 0 || result.modules[modules[position.saturating_sub(1)]].wave != item.wave;
+        if state.pane == Pane::Modules && starts_wave {
+            let heading = item.wave.map_or_else(
+                || "━━ VAGUE INCONNUE ━━".to_owned(),
+                |wave| format!("━━ VAGUE {wave} ━━"),
+            );
+            module_items.push(ListItem::new(Line::from(Span::styled(
+                heading,
+                Style::default()
+                    .fg(item.wave.map_or(Color::Magenta, wave_color))
+                    .add_modifier(Modifier::BOLD),
+            ))));
+        }
+
+        module_selection_rows.push(module_items.len());
+        let mut lines = if state.pane == Pane::Modules {
+            vec![
+                Line::from(vec![
+                    Span::styled(
+                        format!("{marker} "),
+                        Style::default().fg(item.wave.map_or(Color::Magenta, wave_color)),
+                    ),
+                    Span::styled(status_label(item), status_style(&item.status)),
+                ]),
+                Line::from(item.path.clone()),
+            ]
+        } else {
+            let module_name = item
+                .path
+                .rsplit(|character| character == '/' || character == char::from(92))
+                .next()
+                .unwrap_or(&item.path);
+            vec![
+                Line::from(Span::styled(status_label(item), status_style(&item.status))),
+                Line::from(format!("{marker} {module_name}")),
+            ]
+        };
+        if state.pane == Pane::Modules
+            && let Some(totals) = &item.totals
+        {
+            lines.push(counter_line(totals));
+        }
+        module_items.push(ListItem::new(lines));
+    }
     let mut module_state = ListState::default();
-    module_state.select((!modules.is_empty()).then_some(state.module));
+    module_state.select(module_selection_rows.get(state.module).copied());
     frame.render_stateful_widget(
         List::new(module_items)
             .block(panel(
@@ -1206,6 +1222,18 @@ mod tests {
     }
 
     #[test]
+    fn cleanup_prompt_only_accepts_press_events() {
+        let mut release_y = KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE);
+        release_y.kind = KeyEventKind::Release;
+        let yes = KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE);
+        let other = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE);
+
+        assert_eq!(cleanup_confirmation(release_y), None);
+        assert_eq!(cleanup_confirmation(yes), Some(true));
+        assert_eq!(cleanup_confirmation(other), Some(false));
+    }
+
+    #[test]
     fn wave_colors_are_distinct_warm_sunset_accents() {
         let colors = (0..5).map(wave_color).collect::<Vec<_>>();
 
@@ -1218,7 +1246,7 @@ mod tests {
     }
 
     #[test]
-    fn review_render_groups_modules_under_explicit_wave_headings() {
+    fn review_render_groups_waves_without_selecting_headings() {
         let modules = vec![
             ModuleResult {
                 path: "prod/db".into(),
@@ -1229,9 +1257,25 @@ mod tests {
                 logs: vec![],
             },
             ModuleResult {
+                path: "prod/cache".into(),
+                status: "planned".into(),
+                wave: Some(0),
+                totals: None,
+                resources: vec![],
+                logs: vec![],
+            },
+            ModuleResult {
                 path: "prod/api".into(),
                 status: "planned".into(),
                 wave: Some(1),
+                totals: None,
+                resources: vec![],
+                logs: vec![],
+            },
+            ModuleResult {
+                path: "prod/unknown".into(),
+                status: "unknown".into(),
+                wave: None,
                 totals: None,
                 resources: vec![],
                 logs: vec![],
@@ -1251,7 +1295,7 @@ mod tests {
 
         terminal
             .draw(|frame| {
-                let visible = [0, 1];
+                let visible = [0, 1, 2, 3];
                 render_review(
                     frame,
                     &result,
@@ -1262,6 +1306,52 @@ mod tests {
                 )
             })
             .unwrap();
+        let lines = terminal
+            .backend()
+            .buffer()
+            .content()
+            .chunks(100)
+            .map(|line| line.iter().map(|cell| cell.symbol()).collect::<String>())
+            .collect::<Vec<_>>();
+        let text = lines.join("\\n");
+
+        assert_eq!(text.matches("VAGUE 0").count(), 1);
+        assert_eq!(text.matches("VAGUE 1").count(), 1);
+        assert_eq!(text.matches("VAGUE INCONNUE").count(), 1);
+        assert!(!lines[1].contains('›'));
+        assert!(lines[2].contains("› W0 PLANNED"));
+    }
+
+    #[test]
+    fn review_module_list_uses_compact_wave_markers_outside_module_pane() {
+        let result = RunResult {
+            schema_version: 1,
+            command: vec![],
+            exit_code: 0,
+            complete: true,
+            cancelled: false,
+            totals: None,
+            modules: vec![ModuleResult {
+                path: "prod/db".into(),
+                status: "planned".into(),
+                wave: Some(2),
+                totals: None,
+                resources: vec![],
+                logs: vec![],
+            }],
+        };
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 20)).unwrap();
+        let state = ReviewState {
+            pane: Pane::Resources,
+            ..ReviewState::default()
+        };
+
+        terminal
+            .draw(|frame| {
+                render_review(frame, &result, &state, &[0], Some(&result.modules[0]), &[])
+            })
+            .unwrap();
         let text = terminal
             .backend()
             .buffer()
@@ -1270,38 +1360,42 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert!(text.contains("VAGUE 0"));
-        assert!(text.contains("VAGUE 1"));
+        assert!(!text.contains("VAGUE"));
+        assert!(text.contains("W2 db"));
     }
 
     #[test]
-    fn held_navigation_keys_are_rate_limited_but_fresh_presses_are_not() {
+    fn press_events_are_paced_and_release_events_are_ignored() {
         let key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
-        let mut last_repeat = None;
         let start = std::time::Instant::now();
+        let mut pacer = NavigationPacer::default();
 
-        assert!(navigation_event_allowed(key, &mut last_repeat, start));
-        let mut repeat = key;
-        repeat.kind = crossterm::event::KeyEventKind::Repeat;
-        assert!(navigation_event_allowed(
-            repeat,
-            &mut last_repeat,
-            start + std::time::Duration::from_millis(181)
+        assert!(pacer.allows(key, start));
+        for elapsed in [30, 60, 90, 120, 150, 179] {
+            assert!(!pacer.allows(key, start + std::time::Duration::from_millis(elapsed)));
+        }
+        assert!(pacer.allows(key, start + std::time::Duration::from_millis(180)));
+
+        let mut release = key;
+        release.kind = KeyEventKind::Release;
+        assert!(!pacer.allows(release, start + std::time::Duration::from_millis(181)));
+    }
+
+    #[test]
+    fn isolated_presses_and_non_navigation_commands_remain_immediate() {
+        let key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        let start = std::time::Instant::now();
+        let mut pacer = NavigationPacer::default();
+
+        assert!(pacer.allows(key, start));
+        assert!(pacer.allows(key, start + std::time::Duration::from_millis(100)));
+        assert!(pacer.allows(
+            KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE),
+            start + std::time::Duration::from_millis(101)
         ));
-        assert!(!navigation_event_allowed(
-            repeat,
-            &mut last_repeat,
-            start + std::time::Duration::from_millis(220)
-        ));
-        assert!(navigation_event_allowed(
-            repeat,
-            &mut last_repeat,
-            start + std::time::Duration::from_millis(362)
-        ));
-        assert!(navigation_event_allowed(
-            key,
-            &mut last_repeat,
-            start + std::time::Duration::from_millis(363)
-        ));
+
+        let mut release = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+        release.kind = KeyEventKind::Release;
+        assert!(!pacer.allows(release, start + std::time::Duration::from_millis(102)));
     }
 }
