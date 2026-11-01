@@ -7,7 +7,7 @@ obj/
 .venv/
 __pycache__/
 .pytest_cache/
-.wayfinder/
+.terragrunt-tui/
 *.pyc
 *.egg-info/
 coverage/

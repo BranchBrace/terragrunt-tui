@@ -1,6 +1,6 @@
-# Terragrunt Wayfinder
+# Terragrunt TUI
 
-CLI/TUI locale et en lecture seule pour préparer et inspecter un `terragrunt run --all plan`. Wayfinder découvre les unités avant l’exécution, montre la commande exacte, puis agrège les changements depuis les JSON de plan structurés. Il n’exécute jamais `apply` ni `destroy` et ne contacte aucun service distant.
+CLI/TUI locale et en lecture seule pour préparer et inspecter un `terragrunt run --all plan`. Terragrunt TUI découvre les unités avant l’exécution, montre la commande exacte, puis agrège les changements depuis les JSON de plan structurés. Il n’exécute jamais `apply` ni `destroy` et ne contacte aucun service distant.
 
 ## Prérequis et limites de compatibilité
 
@@ -8,6 +8,14 @@ CLI/TUI locale et en lecture seule pour préparer et inspecter un `terragrunt ru
 - Terragrunt disposant des commandes `find --dependencies --queue-construct-as=plan --format=json`, `run --all`, `--out-dir` et `--json-out-dir`.
 - Terraform ou OpenTofu compatible avec la génération du JSON de plan par Terragrunt.
 - Aucun binaire Terragrunt/Terraform/OpenTofu réel n’était disponible pour les vérifications de l’agent. Les versions minimales et la compatibilité d’une version Terragrunt donnée ne sont donc pas revendiquées ; seuls les tests Linux synthétiques sont vérifiés ici.
+
+## Installer
+
+```sh
+cargo install --path .
+```
+
+Installe deux commandes équivalentes : `terragrunt-tui` et son alias court `ttui`.
 
 ## Exécuter
 
@@ -17,15 +25,15 @@ Depuis la racine du dépôt, dans un terminal interactif. Remplacer `./fixture-t
 cargo run -- run --cwd ./fixture-terragrunt-jetable
 ```
 
-Wayfinder découvre d’abord les unités puis affiche, avant toute exécution, la liste complète des modules triés par vagues de dépendances. Les vagues inconnues restent identifiées comme telles ; elles ne sont jamais déduites des journaux. Parcourir cette liste avec ↑/↓, PgUp/PgDn, Home/End ; Entrée confirme le plan affiché, `q` ou Échap annule. La vue précise que ces vagues représentent les dépendances, pas l’ordre runtime garanti. Pendant le plan, `q`, Échap ou Ctrl-C interrompent le processus et marquent le résultat incomplet. Après le run, le parcours de revue propose trois panneaux : Modules → Ressources → Modifications.
+Terragrunt TUI découvre d’abord les unités puis affiche, avant toute exécution, la liste complète des modules triés par vagues de dépendances. Les vagues inconnues restent identifiées comme telles ; elles ne sont jamais déduites des journaux. Parcourir cette liste avec ↑/↓, PgUp/PgDn, Home/End ; Entrée confirme le plan affiché, `q` ou Échap annule. La vue précise que ces vagues représentent les dépendances, pas l’ordre runtime garanti. Pendant le plan, `q`, Échap ou Ctrl-C interrompent le processus et marquent le résultat incomplet. Après le run, le parcours de revue propose trois panneaux : Modules → Ressources → Modifications.
 
-Pour ouvrir un résultat Wayfinder déjà sauvegardé :
+Pour ouvrir un résultat Terragrunt TUI déjà sauvegardé :
 
 ```sh
-cargo run -- show --run ./.wayfinder/latest.json
+cargo run -- show --run ./.terragrunt-tui/latest.json
 ```
 
-Par défaut, `run` écrit le résultat redacted dans `.wayfinder/latest.json` sans écraser un fichier existant. `--output PATH` choisit un autre chemin ; `show --run PATH` ouvre ce fichier. La commande `run` exige un terminal interactif afin qu’aucun plan ne parte sans confirmation visible.
+Par défaut, `run` écrit le résultat redacted dans `.terragrunt-tui/latest.json` sans écraser un fichier existant. `--output PATH` choisit un autre chemin ; `show --run PATH` ouvre ce fichier. La commande `run` exige un terminal interactif afin qu’aucun plan ne parte sans confirmation visible.
 
 ## Navigation clavier
 
@@ -41,11 +49,11 @@ Par défaut, `run` écrit le résultat redacted dans `.wayfinder/latest.json` sa
 
 Les compteurs ont des libellés textuels et des couleurs : `ADD` vert, `DELETE` rouge, `CHANGE`/`REPLACE` orange, `UNKNOWN` rose/magenta. Le statut reste lisible sans couleur. Le diff est calculé uniquement depuis les données structurées et n’invente rien si le before/after manque.
 
-Les groupes `W0`, `W1`, etc. représentent la profondeur du graphe de dépendances explicites découvertes. Ce sont des groupes d’éligibilité, pas l’ordre chronologique exact du scheduler : la concurrence peut changer l’ordre réel. Si la source de dépendances est absente ou ambiguë, Wayfinder affiche une vague inconnue au lieu de la déduire depuis les journaux.
+Les groupes `W0`, `W1`, etc. représentent la profondeur du graphe de dépendances explicites découvertes. Ce sont des groupes d’éligibilité, pas l’ordre chronologique exact du scheduler : la concurrence peut changer l’ordre réel. Si la source de dépendances est absente ou ambiguë, Terragrunt TUI affiche une vague inconnue au lieu de la déduire depuis les journaux.
 
 ## Sécurité et fichiers temporaires
 
-Les plans natifs et JSON structurés restent dans un répertoire temporaire marqué, supprimé après fin normale ou interruption gérée. Au démarrage, seuls les restes munis du marqueur Wayfinder sont proposés ; rien n’est supprimé automatiquement et leur nettoyage demande une confirmation distincte. Le JSON sauvegardé ne contient ni fichiers natifs ni journaux bruts.
+Les plans natifs et JSON structurés restent dans un répertoire temporaire marqué, supprimé après fin normale ou interruption gérée. Au démarrage, seuls les restes munis du marqueur Terragrunt TUI sont proposés ; rien n’est supprimé automatiquement et leur nettoyage demande une confirmation distincte. Le JSON sauvegardé ne contient ni fichiers natifs ni journaux bruts.
 
 Les attributs signalés sensibles par le plan sont masqués dans les valeurs before/after et dans les changements sauvegardés. Cette protection ne garantit pas l’absence de secrets dans les journaux, les sorties fournisseur, les valeurs inconnues, la mémoire ou les fichiers natifs temporaires. Pour une première utilisation, choisir une fixture jetable sans données sensibles et inspecter le plan avant toute action séparée.
 

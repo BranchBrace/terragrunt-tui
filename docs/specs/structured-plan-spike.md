@@ -2,7 +2,7 @@
 
 ## Finding
 
-The supported implementation path is Terragrunt's `run --all` stack mode with its documented `--out-dir` and `--json-out-dir` options. Terragrunt writes native plan files per unit and emits machine-readable `tfplan.json` files per unit by invoking Terraform/OpenTofu `show -json`. Wayfinder places both output roots under one unique temporary run directory and reads only the structured JSON; it does not parse resource values from console logs.
+The supported implementation path is Terragrunt's `run --all` stack mode with its documented `--out-dir` and `--json-out-dir` options. Terragrunt writes native plan files per unit and emits machine-readable `tfplan.json` files per unit by invoking Terraform/OpenTofu `show -json`. Terragrunt TUI places both output roots under one unique temporary run directory and reads only the structured JSON; it does not parse resource values from console logs.
 
 Official reference: https://terragrunt.gruntwork.io/docs/reference/cli/commands/run (sections `--json-out-dir`, `--out-dir`; examples show `terragrunt run --all --out-dir /tmp/all --json-out-dir /tmp/all plan`).
 
@@ -11,7 +11,7 @@ Official reference: https://terragrunt.gruntwork.io/docs/reference/cli/commands/
 - Agent environment: Linux; Python `3.14.7` verified via `uv run python --version`.
 - `terragrunt` and `terraform` are not installed in this workspace (`command -v` returned no path for either).
 - Therefore no Terragrunt or Terraform version is claimed as tested, and no real infrastructure plan was run.
-- Synthetic Terragrunt executable exercised unit discovery, the exact planned argument list, per-unit structured output creation/parsing, interruption handling, and temporary-directory cleanup. This verifies Wayfinder's orchestration contract only; it does not substitute for a real-version integration run.
+- Synthetic Terragrunt executable exercised unit discovery, the exact planned argument list, per-unit structured output creation/parsing, interruption handling, and temporary-directory cleanup. This verifies Terragrunt TUI's orchestration contract only; it does not substitute for a real-version integration run.
 
 ## Implemented contract
 
@@ -19,7 +19,7 @@ Official reference: https://terragrunt.gruntwork.io/docs/reference/cli/commands/
 2. Run only `terragrunt run --all --out-dir <private-run-dir>/plans --json-out-dir <private-run-dir>/json plan`.
 3. Parse each `<unit>/tfplan.json`, redact `before_sensitive` and `after_sensitive` recursively, and compute counts from resource actions. Create+delete is counted as replacement (one add and one destroy).
 4. Treat missing/malformed/errored structured output or failed Terragrunt exit as incomplete; suppress global totals rather than present partial counts.
-5. Keep native and JSON plan files inside an isolated temporary directory; clean it on normal completion and handled interruption. Leftovers are detected by a Wayfinder ownership marker and are never removed automatically. Interactive cleanup requires a second, explicit confirmation.
+5. Keep native and JSON plan files inside an isolated temporary directory; clean it on normal completion and handled interruption. Leftovers are detected by a Terragrunt TUI ownership marker and are never removed automatically. Interactive cleanup requires a second, explicit confirmation.
 6. Logs remain hidden by default and are excluded from saved JSON results. The UI warns that masking is not a guarantee of secret-free logs, unknown values, memory, or disk contents.
 
 ## Unresolved compatibility boundary
