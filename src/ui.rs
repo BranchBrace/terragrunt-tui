@@ -243,31 +243,9 @@ pub fn show_progress(
     current: Option<&str>,
     completed: usize,
     total: usize,
+    logs: &[String],
 ) -> io::Result<bool> {
-    terminal.draw(|frame| {
-        let text = vec![
-            Line::from(Span::styled(
-                "PLAN TERRAGRUNT EN COURS",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from("Mode lecture seule : run --all plan"),
-            Line::from(format!(
-                "Progression détectée : {completed}/{total} modules"
-            )),
-            Line::from(format!(
-                "Module actif : {}",
-                current.unwrap_or("en attente de sortie")
-            )),
-            Line::from("Journaux bruts masqués · q / Échap / Ctrl-C : interrompre et nettoyer"),
-        ];
-        frame.render_widget(
-            Paragraph::new(Text::from(text))
-                .block(Block::default().title("Exécution").borders(Borders::ALL)),
-            frame.area(),
-        );
-    })?;
+    terminal.draw(|frame| render_progress(frame, current, completed, total, logs))?;
     if event::poll(std::time::Duration::ZERO)?
         && let Event::Key(key) = event::read()?
         && (matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
@@ -276,6 +254,71 @@ pub fn show_progress(
         return Ok(false);
     }
     Ok(true)
+}
+
+/// Draws the execution screen: a short status header and, below it, the raw
+/// Terragrunt output streamed live. The log pane always shows the most recent
+/// lines so the user sees the plan progressing as it happens.
+fn render_progress(
+    frame: &mut Frame,
+    current: Option<&str>,
+    completed: usize,
+    total: usize,
+    logs: &[String],
+) {
+    let areas = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(6), Constraint::Min(3)])
+        .split(frame.area());
+    let header = vec![
+        Line::from(Span::styled(
+            "PLAN TERRAGRUNT EN COURS",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from("Mode lecture seule : run --all plan"),
+        Line::from(format!(
+            "Progression détectée : {completed}/{total} modules"
+        )),
+        Line::from(format!(
+            "Module actif : {}",
+            current.unwrap_or("en attente de sortie")
+        )),
+    ];
+    frame.render_widget(
+        Paragraph::new(Text::from(header)).block(
+            Block::default()
+                .title("Exécution · q / Échap / Ctrl-C : interrompre et nettoyer")
+                .borders(Borders::ALL),
+        ),
+        areas[0],
+    );
+
+    let visible_rows = usize::from(areas[1].height.saturating_sub(2));
+    let start = logs.len().saturating_sub(visible_rows);
+    let log_lines: Vec<Line> = if logs.is_empty() {
+        vec![Line::from(Span::styled(
+            "En attente de la sortie Terragrunt…",
+            Style::default().fg(Color::DarkGray),
+        ))]
+    } else {
+        logs[start..]
+            .iter()
+            .map(|line| Line::from(line.as_str()))
+            .collect()
+    };
+    frame.render_widget(
+        Paragraph::new(Text::from(log_lines)).block(
+            Block::default()
+                .title(format!(
+                    "Journaux Terragrunt en direct · {} lignes · secrets non masqués",
+                    logs.len()
+                ))
+                .borders(Borders::ALL),
+        ),
+        areas[1],
+    );
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -951,6 +994,50 @@ mod tests {
 
         assert_eq!(create_lines, [r#"+ name = "value""#]);
         assert_eq!(delete_lines, [r#"- name = "value""#]);
+    }
+
+    #[test]
+    fn progress_screen_streams_the_latest_log_lines() {
+        let logs: Vec<String> = (1..=40)
+            .map(|index| format!("ligne-{index:02} sortie terragrunt"))
+            .collect();
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
+        terminal
+            .draw(|frame| render_progress(frame, Some("prod/app"), 1, 3, &logs))
+            .unwrap();
+        let text = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(text.contains("PLAN TERRAGRUNT EN COURS"));
+        assert!(text.contains("1/3 modules"));
+        assert!(text.contains("Journaux Terragrunt en direct"));
+        assert!(text.contains("ligne-40 sortie terragrunt"));
+        assert!(text.contains("ligne-25 sortie terragrunt"));
+        assert!(!text.contains("ligne-01 sortie terragrunt"));
+        assert!(!text.contains("Journaux bruts masqués"));
+    }
+
+    #[test]
+    fn progress_screen_without_output_says_it_is_waiting() {
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
+        terminal
+            .draw(|frame| render_progress(frame, None, 0, 3, &[]))
+            .unwrap();
+        let text = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(text.contains("En attente de la sortie Terragrunt"));
+        assert!(text.contains("0 lignes"));
     }
 
     #[test]

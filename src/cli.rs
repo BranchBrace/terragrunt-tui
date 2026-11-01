@@ -90,17 +90,22 @@ fn run(
 
     let mut completed = 0usize;
     let mut current = None;
+    let mut logs = Vec::new();
     let mut progress_error = None;
-    let result = engine::execute_plan(terragrunt, &root, &units, &workspace, &mut |path| {
-        if let Some(path) = path {
+    let result = engine::execute_plan(terragrunt, &root, &units, &workspace, &mut |event| {
+        if let Some(path) = event.unit {
             completed = completed.saturating_add(1);
             current = Some(path);
+        }
+        if let Some(line) = event.line {
+            logs.push(line);
         }
         match ui::show_progress(
             &mut session.terminal,
             current.as_deref(),
             completed,
             units.len(),
+            &logs,
         ) {
             Ok(keep_running) => keep_running,
             Err(error) => {

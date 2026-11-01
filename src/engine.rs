@@ -29,6 +29,18 @@ impl std::fmt::Display for EngineError {
 
 impl std::error::Error for EngineError {}
 
+/// Live progress delivered by [`execute_plan`] while Terragrunt runs.
+///
+/// `line` is the raw output line just received (stdout or stderr) so the UI can
+/// stream the logs as they appear. `unit` is set the first time a unit path is
+/// recognised in the output. A tick with neither field lets the caller poll
+/// for cancellation while Terragrunt is silent.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PlanProgress {
+    pub line: Option<String>,
+    pub unit: Option<String>,
+}
+
 impl From<std::io::Error> for EngineError {
     fn from(value: std::io::Error) -> Self {
         Self::Io(value)
@@ -152,7 +164,7 @@ pub fn execute_plan<F>(
     progress: &mut F,
 ) -> Result<RunResult, EngineError>
 where
-    F: FnMut(Option<String>) -> bool,
+    F: FnMut(PlanProgress) -> bool,
 {
     let root = root.canonicalize()?;
     fs::create_dir_all(&workspace.plan_dir)?;
@@ -186,22 +198,23 @@ where
     drop(sender);
     let mut log_lines = Vec::new();
     let mut reported_units = BTreeSet::new();
-    let mut cancelled = !progress(None);
+    let mut cancelled = !progress(PlanProgress::default());
     while !cancelled {
-        let mut active = None;
+        let mut event = PlanProgress::default();
         match receiver.recv_timeout(Duration::from_millis(100)) {
             Ok(line) => {
                 if let Some(unit) = units.iter().find(|unit| line.contains(&unit.path))
                     && reported_units.insert(unit.path.clone())
                 {
-                    active = Some(unit.path.clone());
+                    event.unit = Some(unit.path.clone());
                 }
+                event.line = Some(line.clone());
                 log_lines.push(line);
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
-        if !progress(active) {
+        if !progress(event) {
             cancelled = true;
         }
     }
@@ -451,14 +464,18 @@ else:
         let workspace = RunWorkspace::new().unwrap();
         let workspace_path = workspace.path().to_path_buf();
         let mut progress = Vec::new();
+        let mut streamed_lines = Vec::new();
         let result = execute_plan(
             &terragrunt,
             fixture.path(),
             &units,
             &workspace,
-            &mut |unit| {
-                if let Some(unit) = unit {
+            &mut |event| {
+                if let Some(unit) = event.unit {
                     progress.push(unit);
+                }
+                if let Some(line) = event.line {
+                    streamed_lines.push(line);
                 }
                 true
             },
@@ -469,6 +486,7 @@ else:
         assert_eq!(result.totals.as_ref().unwrap().added, 1);
         assert_eq!(result.modules[0].resources[0].after["token"], "[REDACTED]");
         assert_eq!(progress, vec!["prod/app"]);
+        assert_eq!(streamed_lines, vec!["Running command in prod/app"]);
         assert!(
             !serde_json::to_string(&result)
                 .unwrap()
@@ -541,7 +559,7 @@ else:
             fixture.path(),
             &units,
             &workspace,
-            &mut |unit| unit.is_none(),
+            &mut |event| event.line.is_none() && event.unit.is_none(),
         )
         .unwrap();
 
