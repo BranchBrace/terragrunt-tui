@@ -260,31 +260,9 @@ pub fn show_progress(
     current: Option<&str>,
     completed: usize,
     total: usize,
+    logs: &[String],
 ) -> io::Result<bool> {
-    terminal.draw(|frame| {
-        paint_background(frame);
-        let mut hints = vec![Span::styled("Journaux bruts masqués · ", theme::dim())];
-        hints.extend(theme::key_hint(
-            "q / Échap / Ctrl-C",
-            "interrompre et nettoyer",
-        ));
-        let text = vec![
-            Line::from(Span::styled("PLAN TERRAGRUNT EN COURS", theme::title())),
-            Line::from("Mode lecture seule : run --all plan"),
-            Line::from(format!(
-                "Progression détectée : {completed}/{total} modules"
-            )),
-            Line::from(format!(
-                "Module actif : {}",
-                current.unwrap_or("en attente de sortie")
-            )),
-            Line::from(hints),
-        ];
-        frame.render_widget(
-            Paragraph::new(Text::from(text)).block(theme::panel("Exécution", true)),
-            frame.area(),
-        );
-    })?;
+    terminal.draw(|frame| render_progress(frame, current, completed, total, logs))?;
     if event::poll(std::time::Duration::ZERO)?
         && let Event::Key(key) = event::read()?
         && (matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
@@ -293,6 +271,63 @@ pub fn show_progress(
         return Ok(false);
     }
     Ok(true)
+}
+
+/// Draws the execution screen: a short status header and, below it, the raw
+/// Terragrunt output streamed live. The log pane always shows the most recent
+/// lines so the user sees the plan progressing as it happens.
+fn render_progress(
+    frame: &mut Frame,
+    current: Option<&str>,
+    completed: usize,
+    total: usize,
+    logs: &[String],
+) {
+    paint_background(frame);
+    let areas = Layout::vertical([Constraint::Length(7), Constraint::Min(3)]).split(frame.area());
+    let mut hints = Vec::new();
+    hints.extend(theme::key_hint(
+        "q / Échap / Ctrl-C",
+        "interrompre et nettoyer",
+    ));
+    let header = vec![
+        Line::from(Span::styled("PLAN TERRAGRUNT EN COURS", theme::title())),
+        Line::from("Mode lecture seule : run --all plan"),
+        Line::from(format!(
+            "Progression détectée : {completed}/{total} modules"
+        )),
+        Line::from(format!(
+            "Module actif : {}",
+            current.unwrap_or("en attente de sortie")
+        )),
+        Line::from(hints),
+    ];
+    frame.render_widget(
+        Paragraph::new(Text::from(header)).block(theme::panel("Exécution", false)),
+        areas[0],
+    );
+
+    let visible_rows = usize::from(areas[1].height.saturating_sub(2));
+    let start = logs.len().saturating_sub(visible_rows);
+    let log_lines: Vec<Line> = if logs.is_empty() {
+        vec![Line::from(Span::styled(
+            "En attente de la sortie Terragrunt…",
+            theme::dim(),
+        ))]
+    } else {
+        logs[start..]
+            .iter()
+            .map(|line| Line::from(line.as_str()))
+            .collect()
+    };
+    let log_title = format!(
+        "Journaux Terragrunt en direct · {} lignes · secrets non masqués",
+        logs.len()
+    );
+    frame.render_widget(
+        Paragraph::new(Text::from(log_lines)).block(theme::panel(&log_title, true)),
+        areas[1],
+    );
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2037,6 +2072,36 @@ mod tests {
         }
         html.push_str("</pre>");
         html
+    }
+
+    #[test]
+    fn progress_screen_streams_the_latest_log_lines() {
+        let logs: Vec<String> = (1..=40)
+            .map(|index| format!("ligne-{index:02} sortie terragrunt"))
+            .collect();
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        terminal
+            .draw(|frame| render_progress(frame, Some("prod/app"), 1, 3, &logs))
+            .unwrap();
+        let text = screen_lines(&terminal).join("\n");
+        assert!(text.contains("PLAN TERRAGRUNT EN COURS"));
+        assert!(text.contains("1/3 modules"));
+        assert!(text.contains("Journaux Terragrunt en direct"));
+        assert!(text.contains("ligne-40 sortie terragrunt"));
+        assert!(text.contains("ligne-26 sortie terragrunt"));
+        assert!(!text.contains("ligne-01 sortie terragrunt"));
+        assert!(!text.contains("Journaux bruts masqués"));
+    }
+
+    #[test]
+    fn progress_screen_without_output_says_it_is_waiting() {
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        terminal
+            .draw(|frame| render_progress(frame, None, 0, 3, &[]))
+            .unwrap();
+        let text = screen_lines(&terminal).join("\n");
+        assert!(text.contains("En attente de la sortie Terragrunt"));
+        assert!(text.contains("0 lignes"));
     }
 
     #[test]
