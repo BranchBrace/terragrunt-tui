@@ -1,3 +1,11 @@
+# [1.1.0-rc.3](https://github.com/MonniHermes/terragrunt-tui/compare/v1.1.0-rc.2...v1.1.0-rc.3) (2026-11-01)
+
+
+### Features
+
+* **cli:** ttui update [--rc] et sortie par Ctrl+C sur tous les écrans ([1744972](https://github.com/MonniHermes/terragrunt-tui/commit/174497239dcff51ec2a70bac7cc95a6d7e60ca80))
+* **ui:** navigation accélérée, tri des ressources par statut et légende ([8547e30](https://github.com/MonniHermes/terragrunt-tui/commit/8547e30daa7e5c8bf37b243696d53fb1941161bb))
+
 # [1.1.0-rc.2](https://github.com/MonniHermes/terragrunt-tui/compare/v1.1.0-rc.1...v1.1.0-rc.2) (2026-11-01)
 
 
