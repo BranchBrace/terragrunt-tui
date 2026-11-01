@@ -63,18 +63,27 @@ pub fn confirm_plan(
     let mut selected = 0usize;
     let mut navigation_pacer = NavigationPacer::default();
     loop {
-        terminal.draw(|frame| {
-            render_plan_preview(frame, root, command, &rows, workspace, selected);
-        })?;
-        if let Event::Key(key) = event::read()?
-            && navigation_pacer.allows(key, std::time::Instant::now())
-        {
+        if !event::poll(std::time::Duration::ZERO)? {
+            terminal.draw(|frame| {
+                render_plan_preview(frame, root, command, &rows, workspace, selected);
+            })?;
+        }
+        if let Event::Key(key) = event::read()? {
+            if is_interrupt(key) {
+                return Err(interrupted());
+            }
+            let steps = navigation_pacer.steps(key, std::time::Instant::now());
+            if steps == 0 {
+                continue;
+            }
             match key.code {
                 KeyCode::Enter => return Ok(true),
                 KeyCode::Esc | KeyCode::Char('q') => return Ok(false),
-                KeyCode::Up => selected = selected.saturating_sub(1),
+                KeyCode::Up => selected = selected.saturating_sub(steps),
                 KeyCode::Down => {
-                    selected = selected.saturating_add(1).min(rows.len().saturating_sub(1))
+                    selected = selected
+                        .saturating_add(steps)
+                        .min(rows.len().saturating_sub(1))
                 }
                 KeyCode::PageUp => selected = selected.saturating_sub(8),
                 KeyCode::PageDown => {
@@ -237,12 +246,25 @@ pub fn confirm_cleanup(
             );
         })?;
         match event::read()? {
+            Event::Key(key) if is_interrupt(key) => return Err(interrupted()),
             Event::Key(key) if let Some(confirmed) = cleanup_confirmation(key) => {
                 return Ok(confirmed);
             }
             _ => {}
         }
     }
+}
+
+/// Ctrl+C : en mode brut le terminal ne le transforme pas en signal, chaque écran le
+/// traduit donc en erreur `Interrupted`, qui fait quitter l'application.
+fn is_interrupt(key: KeyEvent) -> bool {
+    key.kind != KeyEventKind::Release
+        && key.code == KeyCode::Char('c')
+        && key.modifiers.contains(KeyModifiers::CONTROL)
+}
+
+fn interrupted() -> io::Error {
+    io::Error::new(io::ErrorKind::Interrupted, "interrompu (Ctrl+C)")
 }
 
 fn cleanup_confirmation(key: KeyEvent) -> Option<bool> {
@@ -259,10 +281,13 @@ pub fn show_progress(
     terminal.draw(|frame| render_progress(frame, current, completed, total, logs))?;
     if event::poll(std::time::Duration::ZERO)?
         && let Event::Key(key) = event::read()?
-        && (matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
-            || (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL)))
     {
-        return Ok(false);
+        if is_interrupt(key) {
+            return Err(interrupted());
+        }
+        if matches!(key.code, KeyCode::Char('q') | KeyCode::Esc) {
+            return Ok(false);
+        }
     }
     Ok(true)
 }
@@ -337,6 +362,13 @@ enum DetailView {
     BeforeAfter,
 }
 
+/// Ordre des ressources : par statut (les plus risquées d'abord) ou dans l'ordre du plan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResourceOrder {
+    Status,
+    Plan,
+}
+
 /// Tailles des listes visibles, pour borner les déplacements.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct Bounds {
@@ -352,6 +384,7 @@ struct ReviewState {
     resource: usize,
     scroll: usize,
     view: DetailView,
+    order: ResourceOrder,
     show_logs: bool,
     search: String,
     searching: bool,
@@ -366,6 +399,7 @@ impl Default for ReviewState {
             resource: 0,
             scroll: 0,
             view: DetailView::Diff,
+            order: ResourceOrder::Status,
             show_logs: false,
             search: String::new(),
             searching: false,
@@ -424,6 +458,12 @@ impl ReviewState {
                 self.show_logs = !self.show_logs;
                 self.scroll = 0;
             }
+            KeyCode::Char('s') => {
+                self.order = match self.order {
+                    ResourceOrder::Status => ResourceOrder::Plan,
+                    ResourceOrder::Plan => ResourceOrder::Status,
+                };
+            }
             KeyCode::Char('/') => self.searching = true,
             _ => {}
         }
@@ -462,38 +502,39 @@ fn clamp_index(current: usize, delta: isize, len: usize) -> usize {
     }
 }
 
+/// Transforme les flèches maintenues en déplacements qui accélèrent avec la durée d'appui ;
+/// un appui isolé reste un pas unique.
 #[derive(Default)]
 struct NavigationPacer {
     last_event: Option<(KeyCode, std::time::Instant)>,
-    last_allowed: Option<std::time::Instant>,
+    held_since: Option<std::time::Instant>,
 }
 
 impl NavigationPacer {
-    fn allows(&mut self, key: KeyEvent, now: std::time::Instant) -> bool {
+    /// Nombre de pas à appliquer pour cet événement ; zéro l'ignore.
+    fn steps(&mut self, key: KeyEvent, now: std::time::Instant) -> usize {
         if key.kind == KeyEventKind::Release {
-            return false;
+            return 0;
         }
         if !matches!(key.code, KeyCode::Up | KeyCode::Down) {
-            return key.kind == KeyEventKind::Press;
+            return usize::from(key.kind == KeyEventKind::Press);
         }
 
-        let delay = std::time::Duration::from_millis(180);
-        let repeat_window = std::time::Duration::from_millis(80);
+        let repeat_window = std::time::Duration::from_millis(150);
         let is_repeat = key.kind == KeyEventKind::Repeat
             || self.last_event.is_some_and(|(code, last)| {
                 code == key.code && now.duration_since(last) < repeat_window
             });
         self.last_event = Some((key.code, now));
-
-        if is_repeat
-            && self
-                .last_allowed
-                .is_some_and(|last| now.duration_since(last) < delay)
-        {
-            return false;
+        if !is_repeat {
+            self.held_since = Some(now);
+            return 1;
         }
-        self.last_allowed = Some(now);
-        true
+        let held = now
+            .duration_since(*self.held_since.get_or_insert(now))
+            .as_millis();
+        // Un pas par répétition, puis un de plus toutes les 600 ms d'appui, jusqu'à 5.
+        (1 + held / 600).min(5) as usize
     }
 }
 
@@ -510,7 +551,7 @@ pub fn review(
             .get(state.module)
             .and_then(|index| result.modules.get(*index));
         let visible_resources = module
-            .map(|item| visible_resources(item, &state.search))
+            .map(|item| visible_resources(item, &state.search, state.order))
             .unwrap_or_default();
         state.resource = state
             .resource
@@ -522,32 +563,46 @@ pub fn review(
         });
         let detail = detail_lines(module, resource, &state);
         state.scroll = state.scroll.min(detail.body.len().saturating_sub(1));
-        terminal.draw(|frame| {
-            render_review(
-                frame,
-                result,
-                &state,
-                &visible_modules,
-                module,
-                &visible_resources,
-                &detail,
-            )
-        })?;
         if state.finished {
             return Ok(());
         }
+        // Les événements déjà en file sont traités avant de redessiner : une touche
+        // maintenue ne laisse pas d'arriéré qui ferait défiler après le relâchement.
+        if !event::poll(std::time::Duration::ZERO)? {
+            terminal.draw(|frame| {
+                render_review(
+                    frame,
+                    result,
+                    &state,
+                    &visible_modules,
+                    module,
+                    &visible_resources,
+                    &detail,
+                )
+            })?;
+        }
         if let Event::Key(key) = event::read()? {
-            if !navigation_pacer.allows(key, std::time::Instant::now()) {
-                continue;
+            if is_interrupt(key) {
+                return Err(interrupted());
             }
-            state.handle(
-                key,
-                Bounds {
-                    modules: visible_modules.len(),
-                    resources: visible_resources.len(),
-                    detail: detail.body.len(),
-                },
-            );
+            let bounds = Bounds {
+                modules: visible_modules.len(),
+                resources: visible_resources.len(),
+                detail: detail.body.len(),
+            };
+            let order = state.order;
+            for _ in 0..navigation_pacer.steps(key, std::time::Instant::now()) {
+                state.handle(key, bounds);
+            }
+            if state.order != order
+                && let (Some(item), Some(selected)) =
+                    (module, visible_resources.get(state.resource))
+            {
+                state.resource = self::visible_resources(item, &state.search, state.order)
+                    .iter()
+                    .position(|index| index == selected)
+                    .unwrap_or(0);
+            }
         }
     }
 }
@@ -589,15 +644,33 @@ fn module_rank(module: &ModuleResult) -> u8 {
     }
 }
 
-fn visible_resources(module: &ModuleResult, search: &str) -> Vec<usize> {
+fn visible_resources(module: &ModuleResult, search: &str, order: ResourceOrder) -> Vec<usize> {
     let needle = search.to_lowercase();
-    module
+    let mut indices: Vec<_> = module
         .resources
         .iter()
         .enumerate()
         .filter(|(_, resource)| resource.address.to_lowercase().contains(&needle))
         .map(|(index, _)| index)
-        .collect()
+        .collect();
+    if order == ResourceOrder::Status {
+        indices.sort_by_key(|index| kind_rank(module.resources[*index].kind()));
+    }
+    indices
+}
+
+/// Rang d'une ressource dans le tri par statut : destructions et remplacements d'abord,
+/// ressources inchangées en dernier ; le tri est stable, l'ordre du plan départage.
+fn kind_rank(kind: ChangeKind) -> u8 {
+    match kind {
+        ChangeKind::Delete => 0,
+        ChangeKind::Replace => 1,
+        ChangeKind::Change => 2,
+        ChangeKind::Add => 3,
+        ChangeKind::Unknown => 4,
+        ChangeKind::Read => 5,
+        ChangeKind::NoChange => 6,
+    }
 }
 
 /// Contenu du panneau Modifications : un en-tête fixe et un corps qui défile.
@@ -785,7 +858,7 @@ fn render_review(
     detail: &Detail,
 ) {
     paint_background(frame);
-    let rows = Layout::vertical([Constraint::Min(5), Constraint::Length(2)]).split(frame.area());
+    let rows = Layout::vertical([Constraint::Min(5), Constraint::Length(3)]).split(frame.area());
     let panes: Vec<Rect> = match state.pane {
         Pane::Modules => {
             Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)])
@@ -972,7 +1045,11 @@ fn render_resources_pane(
 ) {
     let focused = state.pane == Pane::Resources;
     let reduced = state.pane == Pane::Changes;
-    let title = format!("Ressources · {}", resources.len());
+    let title = match (reduced, state.order) {
+        (true, _) => format!("Ressources · {}", resources.len()),
+        (false, ResourceOrder::Status) => format!("Ressources · {} · par statut", resources.len()),
+        (false, ResourceOrder::Plan) => format!("Ressources · {} · ordre du plan", resources.len()),
+    };
     let block = theme::panel(&title, focused);
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -1100,6 +1177,7 @@ fn render_footer(
                 ("←", "modules"),
                 ("→", "diff"),
                 ("d", "avant/après"),
+                ("s", "tri"),
                 ("/", "rechercher"),
                 ("q", "quitter"),
             ],
@@ -1152,9 +1230,52 @@ fn render_footer(
         ));
     }
     frame.render_widget(
-        Paragraph::new(vec![Line::from(hints), Line::from(summary)]),
+        Paragraph::new(vec![
+            Line::from(hints),
+            Line::from(summary),
+            legend_line(usize::from(area.width)),
+        ]),
         area,
     );
+}
+
+/// Légende des symboles colorés ; les entrées se resserrent sur un terminal étroit.
+fn legend_line(width: usize) -> Line<'static> {
+    let entries = [
+        (kind_glyph(ChangeKind::Add), theme::ADD, "créer"),
+        (kind_glyph(ChangeKind::Change), theme::CHANGE, "modifier"),
+        (kind_glyph(ChangeKind::Replace), theme::REPLACE, "remplacer"),
+        (kind_glyph(ChangeKind::Delete), theme::DELETE, "détruire"),
+        (kind_glyph(ChangeKind::Read), theme::READ, "lire"),
+        (
+            kind_glyph(ChangeKind::NoChange),
+            theme::NO_CHANGES,
+            "inchangé",
+        ),
+        (status_glyph("failed"), theme::FAILED, "échec"),
+        (kind_glyph(ChangeKind::Unknown), theme::UNKNOWN, "inconnu"),
+    ];
+    let text_width: usize = entries
+        .iter()
+        .map(|(glyph, _, label)| glyph.chars().count() + 1 + label.chars().count())
+        .sum();
+    let gap = if text_width + 2 * (entries.len() - 1) <= width {
+        "  "
+    } else {
+        " "
+    };
+    let mut spans = Vec::with_capacity(entries.len() * 3);
+    for (position, (glyph, color, label)) in entries.into_iter().enumerate() {
+        if position > 0 {
+            spans.push(Span::raw(gap));
+        }
+        spans.push(Span::styled(
+            glyph,
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(format!(" {label}"), theme::dim()));
+    }
+    Line::from(spans)
 }
 
 fn status_label(module: &ModuleResult) -> &'static str {
@@ -1790,6 +1911,17 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_c_is_an_interrupt_but_plain_c_and_releases_are_not() {
+        let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        assert!(is_interrupt(ctrl_c));
+        assert!(!is_interrupt(key(KeyCode::Char('c'))));
+        let mut release = ctrl_c;
+        release.kind = KeyEventKind::Release;
+        assert!(!is_interrupt(release));
+        assert_eq!(interrupted().kind(), io::ErrorKind::Interrupted);
+    }
+
+    #[test]
     fn cleanup_prompt_only_accepts_press_events() {
         let mut release_y = KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE);
         release_y.kind = KeyEventKind::Release;
@@ -1802,38 +1934,134 @@ mod tests {
     }
 
     #[test]
-    fn press_events_are_paced_and_release_events_are_ignored() {
+    fn held_arrows_repeat_without_throttling_then_accelerate() {
         let key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         let start = std::time::Instant::now();
+        let at = |millis| start + std::time::Duration::from_millis(millis);
         let mut pacer = NavigationPacer::default();
 
-        assert!(pacer.allows(key, start));
-        for elapsed in [30, 60, 90, 120, 150, 179] {
-            assert!(!pacer.allows(key, start + std::time::Duration::from_millis(elapsed)));
+        assert_eq!(pacer.steps(key, start), 1);
+        for elapsed in (33..=561).step_by(33) {
+            assert_eq!(
+                pacer.steps(key, at(elapsed)),
+                1,
+                "répétition à {elapsed} ms"
+            );
         }
-        assert!(pacer.allows(key, start + std::time::Duration::from_millis(180)));
+        assert_eq!(pacer.steps(key, at(600)), 2);
+        let mut elapsed = 600;
+        while elapsed < 3000 {
+            elapsed += 33;
+            pacer.steps(key, at(elapsed));
+        }
+        assert_eq!(pacer.steps(key, at(elapsed + 33)), 5);
 
         let mut release = key;
         release.kind = KeyEventKind::Release;
-        assert!(!pacer.allows(release, start + std::time::Duration::from_millis(181)));
+        assert_eq!(pacer.steps(release, at(elapsed + 34)), 0);
     }
 
     #[test]
-    fn isolated_presses_and_non_navigation_commands_remain_immediate() {
+    fn isolated_presses_and_non_navigation_commands_are_single_steps() {
         let key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         let start = std::time::Instant::now();
+        let at = |millis| start + std::time::Duration::from_millis(millis);
         let mut pacer = NavigationPacer::default();
 
-        assert!(pacer.allows(key, start));
-        assert!(pacer.allows(key, start + std::time::Duration::from_millis(100)));
-        assert!(pacer.allows(
-            KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE),
-            start + std::time::Duration::from_millis(101)
-        ));
+        assert_eq!(pacer.steps(key, start), 1);
+        assert_eq!(pacer.steps(key, at(1000)), 1);
+        let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+        assert_eq!(pacer.steps(tab, at(1001)), 1);
 
-        let mut release = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+        let mut repeated = tab;
+        repeated.kind = KeyEventKind::Repeat;
+        assert_eq!(pacer.steps(repeated, at(1002)), 0);
+        let mut release = tab;
         release.kind = KeyEventKind::Release;
-        assert!(!pacer.allows(release, start + std::time::Duration::from_millis(102)));
+        assert_eq!(pacer.steps(release, at(1003)), 0);
+    }
+
+    #[test]
+    fn resources_sort_by_status_by_default_and_s_restores_plan_order() {
+        let resource = |address: &str, actions: &[&str]| ResourceChange {
+            address: address.into(),
+            actions: actions.iter().map(|action| (*action).into()).collect(),
+            ..updated_resource()
+        };
+        let mut item = module("app", "planned", Some(0), None);
+        item.resources = vec![
+            resource("a.created", &["create"]),
+            resource("b.kept", &["no-op"]),
+            resource("c.updated", &["update"]),
+            resource("d.deleted", &["delete"]),
+            resource("e.replaced", &["delete", "create"]),
+        ];
+        let addresses = |order| {
+            visible_resources(&item, "", order)
+                .into_iter()
+                .map(|index| item.resources[index].address.as_str())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            addresses(ResourceOrder::Status),
+            [
+                "d.deleted",
+                "e.replaced",
+                "c.updated",
+                "a.created",
+                "b.kept"
+            ]
+        );
+        assert_eq!(
+            addresses(ResourceOrder::Plan),
+            [
+                "a.created",
+                "b.kept",
+                "c.updated",
+                "d.deleted",
+                "e.replaced"
+            ]
+        );
+
+        let mut state = ReviewState::default();
+        assert_eq!(state.order, ResourceOrder::Status);
+        state.handle(key(KeyCode::Char('s')), bounds(1, 5, 0));
+        assert_eq!(state.order, ResourceOrder::Plan);
+    }
+
+    #[test]
+    fn footer_ends_with_a_legend_of_the_coloured_symbols() {
+        let result = run(vec![module("app", "planned", Some(0), None)]);
+        let visible = visible_modules(&result, "");
+        for width in [80, 120] {
+            let mut terminal = Terminal::new(TestBackend::new(width, 24)).unwrap();
+            draw(
+                &mut terminal,
+                &result,
+                &ReviewState::default(),
+                &visible,
+                &[],
+            );
+            let lines = screen_lines(&terminal);
+            let legend = lines.last().unwrap();
+            for entry in [
+                "+ créer",
+                "~ modifier",
+                "± remplacer",
+                "- détruire",
+                "○ lire",
+                "· inchangé",
+                "✗ échec",
+                "? inconnu",
+            ] {
+                assert!(
+                    legend.contains(entry),
+                    "{width} colonnes : {legend:?} sans {entry:?}"
+                );
+            }
+            let cell = &terminal.backend().buffer()[(column(legend, "- détruire"), 23)];
+            assert_eq!(cell.fg, theme::DELETE);
+        }
     }
 
     /// Rend un écran en HTML fidèle (cellules, couleurs, graisse) pour les captures.
@@ -1922,10 +2150,10 @@ mod tests {
             .iter()
             .position(|index| result.modules[*index].path.ends_with("prod/apps/app"))
             .unwrap();
-        let replaced = result.modules[visible[app]]
-            .resources
+        let app_module = &result.modules[visible[app]];
+        let replaced = visible_resources(app_module, "", ResourceOrder::Status)
             .iter()
-            .position(|resource| resource.kind() == ChangeKind::Replace)
+            .position(|index| app_module.resources[*index].kind() == ChangeKind::Replace)
             .unwrap();
         let mut html = String::from(
             "<!doctype html><meta charset=\"utf-8\"><title>Captures revue</title>\
@@ -1962,7 +2190,7 @@ mod tests {
             let resources = result
                 .modules
                 .get(visible[state.module])
-                .map(|module| visible_resources(module, ""))
+                .map(|module| visible_resources(module, "", ResourceOrder::Status))
                 .unwrap_or_default();
             let mut terminal = Terminal::new(TestBackend::new(120, 32)).unwrap();
             draw(&mut terminal, &result, &state, &visible, &resources);
