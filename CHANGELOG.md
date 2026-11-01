@@ -1,3 +1,34 @@
+# [1.0.0-rc.4](https://github.com/MonniHermes/terragrunt-tui/compare/v1.0.0-rc.3...v1.0.0-rc.4) (2026-11-01)
+
+
+* refactor!: rename project to Terragrunt TUI ([2bceedd](https://github.com/MonniHermes/terragrunt-tui/commit/2bceedd4a23969684788f080914c9945f51e24d4))
+
+
+### Bug Fixes
+
+* **build:** keep ttui entry point out of ignored bin directory ([10a5915](https://github.com/MonniHermes/terragrunt-tui/commit/10a5915998560c9631993a06f1f7d98637bcdddb))
+* complete Rust Wayfinder migration ([06cf5e3](https://github.com/MonniHermes/terragrunt-tui/commit/06cf5e38ad832647feb42d58f290e53ba268ba26))
+* fail closed on unknown plan data ([fc2f530](https://github.com/MonniHermes/terragrunt-tui/commit/fc2f5303a108054484fd907dca987c82b2994d47))
+* improve TUI navigation and layout ([3daa2da](https://github.com/MonniHermes/terragrunt-tui/commit/3daa2dae355a2761a8ba14ad28694e569841930b))
+* **release:** drop duplicated rc.4 changelog entries left by failed tagging ([82185f0](https://github.com/MonniHermes/terragrunt-tui/commit/82185f01606a903c6a4125038c10521004c96def))
+* restore visible TUI search field ([59ad013](https://github.com/MonniHermes/terragrunt-tui/commit/59ad0138bb3295c3375e0be93a624d3afae7502f))
+* **ui:** group waves and pace keyboard navigation ([eafa098](https://github.com/MonniHermes/terragrunt-tui/commit/eafa098344b3502c576bd0e7bf85ec6772db8e22))
+* **ui:** normalize preflight waves and cache rows ([69c090e](https://github.com/MonniHermes/terragrunt-tui/commit/69c090e6857d5d52a535c47b3c39d9d058579e17))
+* **ui:** pace real key presses and isolate wave headings ([4aebd96](https://github.com/MonniHermes/terragrunt-tui/commit/4aebd96e4bab882fd2e2349875b381f0dedf0f23))
+
+
+### Features
+
+* migrate Wayfinder plan review to Rust ([19971e8](https://github.com/MonniHermes/terragrunt-tui/commit/19971e817a0407de199a2bcd60111d8c1d8cda8b))
+* **tui:** list planned modules by dependency wave ([a025984](https://github.com/MonniHermes/terragrunt-tui/commit/a025984ce14a46291d4db94430f43f7f0f3fe1a6))
+
+
+### BREAKING CHANGES
+
+* the wayfinder command is replaced by terragrunt-tui
+(alias ttui); saved results now default to .terragrunt-tui/latest.json
+and temporary directories use the terragrunt-tui- prefix.
+
 # [1.0.0-rc.3](https://github.com/MonniHermes/terragrunt-wayfinder/compare/v1.0.0-rc.2...v1.0.0-rc.3) (2026-10-31)
 
 
