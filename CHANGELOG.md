@@ -1,3 +1,10 @@
+# [1.1.0-rc.1](https://github.com/MonniHermes/terragrunt-tui/compare/v1.0.0...v1.1.0-rc.1) (2026-11-01)
+
+
+### Features
+
+* **ui:** two-pane review with wave tree, git-style diff and ELIA36 theme ([0a2bd9f](https://github.com/MonniHermes/terragrunt-tui/commit/0a2bd9f884477663a3681ea8ec5a0ea8e6c313b0))
+
 # 1.0.0 (2026-11-01)
 
 
