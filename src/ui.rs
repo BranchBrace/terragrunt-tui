@@ -123,7 +123,7 @@ fn render_plan_preview(
     let unknown_count = rows.iter().filter(|(wave, _)| wave.is_none()).count();
     let summary = Paragraph::new(vec![
         Line::from(Span::styled(
-            "WAYFINDER · PLAN TERRAGRUNT UNIQUEMENT",
+            "TERRAGRUNT TUI · PLAN TERRAGRUNT UNIQUEMENT",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
@@ -202,13 +202,13 @@ pub fn confirm_cleanup(
         terminal.draw(|frame| {
             let mut lines = vec![
                 Line::from(Span::styled(
-                    "RÉPERTOIRES TEMPORAIRES WAYFINDER RESTANTS",
+                    "RÉPERTOIRES TEMPORAIRES TERRAGRUNT TUI RESTANTS",
                     Style::default()
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
                 )),
                 Line::from(
-                    "Seuls les répertoires marqués comme appartenant à Wayfinder sont listés.",
+                    "Seuls les répertoires marqués comme appartenant à Terragrunt TUI sont listés.",
                 ),
                 Line::from(
                     "Confirmez leur suppression définitive. Aucune suppression automatique.",

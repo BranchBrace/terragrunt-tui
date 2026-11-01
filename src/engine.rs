@@ -49,10 +49,10 @@ pub struct RunWorkspace {
 
 impl RunWorkspace {
     pub fn new() -> Result<Self, EngineError> {
-        let temporary = Builder::new().prefix("wayfinder-").tempdir()?;
+        let temporary = Builder::new().prefix("terragrunt-tui-").tempdir()?;
         fs::write(
-            temporary.path().join(".wayfinder-owned"),
-            "WAYFINDER_TEMP_V1\n",
+            temporary.path().join(".terragrunt-tui-owned"),
+            "TERRAGRUNT_TUI_TEMP_V1\n",
         )?;
         let plan_dir = temporary.path().join("plans");
         let json_dir = temporary.path().join("json");
@@ -114,12 +114,12 @@ pub fn stale_temp_dirs() -> Vec<PathBuf> {
         .map(|entry| entry.path())
         .filter(|path| {
             path.file_name()
-                .is_some_and(|name| name.to_string_lossy().starts_with("wayfinder-"))
+                .is_some_and(|name| name.to_string_lossy().starts_with("terragrunt-tui-"))
                 && !path.is_symlink()
                 && path.is_dir()
                 && matches!(
-                    fs::read_to_string(path.join(".wayfinder-owned")).as_deref(),
-                    Ok("WAYFINDER_TEMP_V1\n")
+                    fs::read_to_string(path.join(".terragrunt-tui-owned")).as_deref(),
+                    Ok("TERRAGRUNT_TUI_TEMP_V1\n")
                 )
         })
         .collect()
@@ -131,12 +131,13 @@ pub fn remove_stale_temp(path: &Path) -> Result<(), EngineError> {
     if candidate.parent() != Some(root.as_path())
         || !candidate
             .file_name()
-            .is_some_and(|name| name.to_string_lossy().starts_with("wayfinder-"))
+            .is_some_and(|name| name.to_string_lossy().starts_with("terragrunt-tui-"))
         || path.is_symlink()
-        || fs::read_to_string(candidate.join(".wayfinder-owned"))? != "WAYFINDER_TEMP_V1\n"
+        || fs::read_to_string(candidate.join(".terragrunt-tui-owned"))?
+            != "TERRAGRUNT_TUI_TEMP_V1\n"
     {
         return Err(EngineError::Invalid(
-            "refusing to remove a directory not owned by Wayfinder".into(),
+            "refusing to remove a directory not owned by Terragrunt TUI".into(),
         ));
     }
     fs::remove_dir_all(candidate)?;
@@ -501,18 +502,18 @@ else:
     }
 
     #[test]
-    fn stale_temp_cleanup_only_removes_marked_wayfinder_directories() {
+    fn stale_temp_cleanup_only_removes_marked_terragrunt_tui_directories() {
         let marked = Builder::new()
-            .prefix("wayfinder-marked-test-")
+            .prefix("terragrunt-tui-marked-test-")
             .tempdir_in(std::env::temp_dir())
             .unwrap();
         fs::write(
-            marked.path().join(".wayfinder-owned"),
-            "WAYFINDER_TEMP_V1\n",
+            marked.path().join(".terragrunt-tui-owned"),
+            "TERRAGRUNT_TUI_TEMP_V1\n",
         )
         .unwrap();
         let unmarked = Builder::new()
-            .prefix("wayfinder-unmarked-test-")
+            .prefix("terragrunt-tui-unmarked-test-")
             .tempdir_in(std::env::temp_dir())
             .unwrap();
 

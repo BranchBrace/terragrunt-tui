@@ -1550,7 +1550,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "terragrunt-wayfinder"
+name = "terragrunt-tui"
 version = "0.2.0"
 dependencies = [
  "clap",

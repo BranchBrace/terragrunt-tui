@@ -1,14 +1,15 @@
-# Spécification produit — Terragrunt Wayfinder
+# Spécification produit — Terragrunt TUI
 
 ## Objectif et frontières
 
-Fournir une CLI/TUI Rust locale en lecture seule pour découvrir les unités Terragrunt, lancer une unique commande `terragrunt run --all plan`, agréger les résultats structurés, puis permettre une revue interactive des modules, ressources et changements. Wayfinder n’exécute ni `apply` ni `destroy`, n’accepte aucun passthrough de commande et n’utilise aucun service distant. Toute application ultérieure reste une action séparée, manuelle.
+Fournir une CLI/TUI Rust locale en lecture seule pour découvrir les unités Terragrunt, lancer une unique commande `terragrunt run --all plan`, agréger les résultats structurés, puis permettre une revue interactive des modules, ressources et changements. Terragrunt TUI n’exécute ni `apply` ni `destroy`, n’accepte aucun passthrough de commande et n’utilise aucun service distant. Toute application ultérieure reste une action séparée, manuelle.
 
 ## Contrat d’exécution
 
-- `terragrunt-wayfinder run [--cwd PATH] [--terragrunt PATH] [--output PATH]` découvre d’abord les unités et leur graphe par `terragrunt find --dependencies --queue-construct-as=plan --format=json`. Il exige un terminal interactif et présente la commande, la racine, le périmètre, les effets et les limites avant d’attendre une confirmation explicite.
+- Le binaire est distribué sous deux noms équivalents : `terragrunt-tui` et l’alias court `ttui`.
+- `terragrunt-tui run [--cwd PATH] [--terragrunt PATH] [--output PATH]` découvre d’abord les unités et leur graphe par `terragrunt find --dependencies --queue-construct-as=plan --format=json`. Il exige un terminal interactif et présente la commande, la racine, le périmètre, les effets et les limites avant d’attendre une confirmation explicite.
 - Après confirmation, la seule commande de plan est `terragrunt run --all --out-dir <temp>/plans --json-out-dir <temp>/json plan`.
-- `terragrunt-wayfinder show [--run PATH]` lit un JSON de résultat Wayfinder sauvegardé ; il n’exécute aucun plan.
+- `terragrunt-tui show [--run PATH]` lit un JSON de résultat Terragrunt TUI sauvegardé ; il n’exécute aucun plan.
 - Les ressources sont lues exclusivement depuis les fichiers `tfplan.json` par unité. Les journaux ne servent ni à calculer des valeurs/actions/totaux ni à construire les diffs.
 - Sortie manquante, illisible, erreur d’unité, échec de commande ou annulation : résultat incomplet, totaux globaux supprimés, code de sortie non nul. Une annulation identifie explicitement le résultat comme incomplet.
 
