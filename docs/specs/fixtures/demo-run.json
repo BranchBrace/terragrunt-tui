@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "command": [
+    "terragrunt",
+    "run",
+    "--all",
+    "plan"
+  ],
+  "exit_code": 0,
+  "complete": true,
+  "cancelled": false,
+  "totals": {
+    "added": 3,
+    "changed": 2,
+    "deleted": 2
+  },
+  "modules": [
+    {
+      "path": "live/demo/network/vpc",
+      "status": "planned",
+      "wave": 0,
+      "totals": {
+        "added": 1,
+        "changed": 1,
+        "deleted": 0
+      },
+      "resources": [
+        {
+          "address": "aws_vpc.main",
+          "actions": [
+            "update"
+          ],
+          "before": {
+            "cidr_block": "10.0.0.0/16",
+            "tags": {
+              "Environment": "demo"
+            }
+          },
+          "after": {
+            "cidr_block": "10.0.0.0/16",
+            "tags": {
+              "Environment": "demo",
+              "Owner": "platform"
+            }
+          }
+        },
+        {
+          "address": "aws_subnet.private[\"b\"]",
+          "actions": [
+            "create"
+          ],
+          "before": null,
+          "after": {
+            "availability_zone": "eu-west-3b",
+            "cidr_block": "10.0.2.0/24"
+          }
+        }
+      ]
+    },
+    {
+      "path": "live/demo/security/iam",
+      "status": "no_changes",
+      "wave": 0,
+      "totals": {
+        "added": 0,
+        "changed": 0,
+        "deleted": 0
+      },
+      "resources": []
+    },
+    {
+      "path": "live/demo/data/rds",
+      "status": "planned",
+      "wave": 1,
+      "totals": {
+        "added": 1,
+        "changed": 0,
+        "deleted": 2
+      },
+      "resources": [
+        {
+          "address": "aws_db_instance.main",
+          "actions": [
+            "delete",
+            "create"
+          ],
+          "before": {
+            "engine_version": "15.4",
+            "instance_class": "db.t3.medium"
+          },
+          "after": {
+            "engine_version": "16.2",
+            "instance_class": "db.t3.medium"
+          }
+        },
+        {
+          "address": "aws_db_parameter_group.legacy",
+          "actions": [
+            "delete"
+          ],
+          "before": {
+            "family": "postgres15",
+            "name": "demo-legacy"
+          },
+          "after": null
+        }
+      ]
+    },
+    {
+      "path": "live/demo/app/api",
+      "status": "planned",
+      "wave": 2,
+      "totals": {
+        "added": 1,
+        "changed": 1,
+        "deleted": 0
+      },
+      "resources": [
+        {
+          "address": "data.aws_caller_identity.current",
+          "actions": [
+            "read"
+          ],
+          "before": null,
+          "after": {}
+        },
+        {
+          "address": "aws_security_group.api",
+          "actions": [
+            "update"
+          ],
+          "before": {
+            "ingress_ports": [
+              443
+            ]
+          },
+          "after": {
+            "ingress_ports": [
+              443,
+              8443
+            ]
+          }
+        },
+        {
+          "address": "aws_ecs_service.api",
+          "actions": [
+            "create"
+          ],
+          "before": null,
+          "after": {
+            "desired_count": 2,
+            "launch_type": "FARGATE"
+          }
+        }
+      ]
+    },
+    {
+      "path": "live/demo/app/dns",
+      "status": "no_changes",
+      "wave": 2,
+      "totals": {
+        "added": 0,
+        "changed": 0,
+        "deleted": 0
+      },
+      "resources": []
+    }
+  ]
+}
