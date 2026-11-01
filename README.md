@@ -33,6 +33,8 @@ Pour ouvrir un résultat Terragrunt TUI déjà sauvegardé :
 cargo run -- show --run ./.terragrunt-tui/latest.json
 ```
 
+Pour découvrir la revue sans Terragrunt, un résultat synthétique est fourni : `cargo run -- show --run docs/specs/fixtures/demo-run.json`.
+
 Par défaut, `run` écrit le résultat redacted dans `.terragrunt-tui/latest.json` sans écraser un fichier existant. `--output PATH` choisit un autre chemin ; `show --run PATH` ouvre ce fichier. La commande `run` exige un terminal interactif afin qu’aucun plan ne parte sans confirmation visible.
 
 ## Navigation clavier
