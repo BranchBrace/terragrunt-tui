@@ -1,3 +1,10 @@
+# [1.1.0-rc.2](https://github.com/MonniHermes/terragrunt-tui/compare/v1.1.0-rc.1...v1.1.0-rc.2) (2026-11-01)
+
+
+### Features
+
+* **ui:** afficher les journaux Terragrunt en direct pendant le plan ([09bde20](https://github.com/MonniHermes/terragrunt-tui/commit/09bde2022e11da5df92b5c5768997612fbd059c2))
+
 # [1.1.0-rc.1](https://github.com/MonniHermes/terragrunt-tui/compare/v1.0.0...v1.1.0-rc.1) (2026-11-01)
 
 
