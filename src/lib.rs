@@ -7,5 +7,6 @@ mod graph;
 mod model;
 mod theme;
 mod ui;
+mod update;
 
 pub use cli::main;

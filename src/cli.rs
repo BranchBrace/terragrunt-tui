@@ -1,4 +1,4 @@
-use crate::{engine, model, ui};
+use crate::{engine, model, ui, update};
 use clap::{Parser, Subcommand};
 use std::fs::{self, OpenOptions};
 use std::io::{self, IsTerminal};
@@ -30,12 +30,24 @@ enum Command {
         #[arg(long, default_value = ".terragrunt-tui/latest.json")]
         run: PathBuf,
     },
+    /// Install the latest GitHub release (the latest release candidate with `--rc`).
+    Update {
+        #[arg(long)]
+        rc: bool,
+    },
 }
 
 /// Entry point shared by the `terragrunt-tui` and `ttui` binaries.
 pub fn main() {
     let code = match execute(Cli::parse()) {
         Ok(code) => code,
+        Err(error)
+            if error
+                .downcast_ref::<io::Error>()
+                .is_some_and(|error| error.kind() == io::ErrorKind::Interrupted) =>
+        {
+            130
+        }
         Err(error) => {
             eprintln!("terragrunt-tui: {error}");
             2
@@ -52,6 +64,7 @@ fn execute(cli: Cli) -> Result<i32, Box<dyn std::error::Error>> {
             output,
         } => run(cwd, &terragrunt, output),
         Command::Show { run } => show(run),
+        Command::Update { rc } => update::run(rc),
     }
 }
 

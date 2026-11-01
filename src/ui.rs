@@ -69,6 +69,9 @@ pub fn confirm_plan(
             })?;
         }
         if let Event::Key(key) = event::read()? {
+            if is_interrupt(key) {
+                return Err(interrupted());
+            }
             let steps = navigation_pacer.steps(key, std::time::Instant::now());
             if steps == 0 {
                 continue;
@@ -243,12 +246,25 @@ pub fn confirm_cleanup(
             );
         })?;
         match event::read()? {
+            Event::Key(key) if is_interrupt(key) => return Err(interrupted()),
             Event::Key(key) if let Some(confirmed) = cleanup_confirmation(key) => {
                 return Ok(confirmed);
             }
             _ => {}
         }
     }
+}
+
+/// Ctrl+C : en mode brut le terminal ne le transforme pas en signal, chaque écran le
+/// traduit donc en erreur `Interrupted`, qui fait quitter l'application.
+fn is_interrupt(key: KeyEvent) -> bool {
+    key.kind != KeyEventKind::Release
+        && key.code == KeyCode::Char('c')
+        && key.modifiers.contains(KeyModifiers::CONTROL)
+}
+
+fn interrupted() -> io::Error {
+    io::Error::new(io::ErrorKind::Interrupted, "interrompu (Ctrl+C)")
 }
 
 fn cleanup_confirmation(key: KeyEvent) -> Option<bool> {
@@ -265,10 +281,13 @@ pub fn show_progress(
     terminal.draw(|frame| render_progress(frame, current, completed, total, logs))?;
     if event::poll(std::time::Duration::ZERO)?
         && let Event::Key(key) = event::read()?
-        && (matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
-            || (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL)))
     {
-        return Ok(false);
+        if is_interrupt(key) {
+            return Err(interrupted());
+        }
+        if matches!(key.code, KeyCode::Char('q') | KeyCode::Esc) {
+            return Ok(false);
+        }
     }
     Ok(true)
 }
@@ -563,6 +582,9 @@ pub fn review(
             })?;
         }
         if let Event::Key(key) = event::read()? {
+            if is_interrupt(key) {
+                return Err(interrupted());
+            }
             let bounds = Bounds {
                 modules: visible_modules.len(),
                 resources: visible_resources.len(),
@@ -1886,6 +1908,17 @@ mod tests {
         assert!(text.contains("VAGUE INCONNUE"));
         assert!(text.contains("pas un ordre runtime garanti"));
         assert!(text.contains("3 unités à lancer"));
+    }
+
+    #[test]
+    fn ctrl_c_is_an_interrupt_but_plain_c_and_releases_are_not() {
+        let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        assert!(is_interrupt(ctrl_c));
+        assert!(!is_interrupt(key(KeyCode::Char('c'))));
+        let mut release = ctrl_c;
+        release.kind = KeyEventKind::Release;
+        assert!(!is_interrupt(release));
+        assert_eq!(interrupted().kind(), io::ErrorKind::Interrupted);
     }
 
     #[test]
