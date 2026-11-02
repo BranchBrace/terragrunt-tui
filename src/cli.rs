@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 #[derive(Parser)]
 #[command(
     name = "terragrunt-tui",
-    about = "Local, read-only Terragrunt plan review"
+    about = "Local, read-only Terragrunt plan review",
+    version = VERSION
 )]
 struct Cli {
     #[command(subcommand)]
@@ -35,7 +36,12 @@ enum Command {
         #[arg(long)]
         rc: bool,
     },
+    /// Print the installed version.
+    Version,
 }
+
+/// Version embedded by `build.rs`.
+const VERSION: &str = env!("TTUI_VERSION");
 
 /// Entry point shared by the `terragrunt-tui` and `ttui` binaries.
 pub fn main() {
@@ -65,6 +71,10 @@ fn execute(cli: Cli) -> Result<i32, Box<dyn std::error::Error>> {
         } => run(cwd, &terragrunt, output),
         Command::Show { run } => show(run),
         Command::Update { rc } => update::run(rc),
+        Command::Version => {
+            println!("terragrunt-tui {VERSION}");
+            Ok(0)
+        }
     }
 }
 

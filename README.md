@@ -17,6 +17,8 @@ cargo install --path .
 
 Installe deux commandes équivalentes : `terragrunt-tui` et son alias court `ttui`.
 
+`ttui version` (ou `ttui --version`) affiche la version installée : le tag de release pour une installation depuis un tag, le `git describe` du commit (`1.1.0-rc.3-2-gabc1234-dirty`) pour un build local du dépôt.
+
 ## Exécuter
 
 Depuis la racine du dépôt, dans un terminal interactif. Remplacer `./fixture-terragrunt-jetable` par le chemin d’une fixture locale jetable (aucune fixture Terragrunt n’est fournie dans le dépôt) :
