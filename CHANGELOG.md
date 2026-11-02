@@ -1,3 +1,10 @@
+# [1.1.0-rc.4](https://github.com/MonniHermes/terragrunt-tui/compare/v1.1.0-rc.3...v1.1.0-rc.4) (2026-11-02)
+
+
+### Features
+
+* **cli:** ajouter la commande version et --version ([ec9eeec](https://github.com/MonniHermes/terragrunt-tui/commit/ec9eeecb761e6745f6d58974f0d390cc512f9f85))
+
 # [1.1.0-rc.3](https://github.com/MonniHermes/terragrunt-tui/compare/v1.1.0-rc.2...v1.1.0-rc.3) (2026-11-01)
 
 
