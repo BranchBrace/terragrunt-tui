@@ -3,7 +3,7 @@ name = "terragrunt-tui"
 version = "1.1.0-rc.4"
 edition = "2024"
 rust-version = "1.88"
-license = "LicenseRef-Proprietary"
+license = "MIT"
 description = "Local read-only Terragrunt plan aggregator CLI and TUI"
 repository = "https://github.com/MonniHermes/terragrunt-tui"
 

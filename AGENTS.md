@@ -5,5 +5,5 @@
 - La CI (`.github/workflows/quality-release.yml`) détecte la stack : ajouter les scripts `lint`, `typecheck`, `test`, `build` (Node), une solution `.slnx` (.NET) ou un `pyproject.toml` (Python) suffit à les faire exécuter. Semgrep tourne toujours.
 - Aucun artefact CI : pas de rapport, trace ni capture Playwright téléversés.
 - Images de release : les déclarer dans `deploy/images.txt` ; elles sont publiées sur GHCR à chaque release. Le staging Argo CD se branche ensuite (`staging-gitops-tsuzuri/docs/onboarding.md`).
-- Licence propriétaire : `LICENSE` (All Rights Reserved) et `"license": "UNLICENSED"` dans tout `package.json`.
+- Licence MIT : `LICENSE` et `license = "MIT"` dans `Cargo.toml` (`"license": "MIT"` dans tout `package.json`).
 - Spécifications : `docs/specs/` ; suivi du travail : projet Paperclip « Terragrunt TUI ».
