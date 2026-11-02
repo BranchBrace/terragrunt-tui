@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.88"
 license = "MIT"
 description = "Local read-only Terragrunt plan aggregator CLI and TUI"
-repository = "https://github.com/MonniHermes/terragrunt-tui"
+repository = "https://github.com/BranchBrace/terragrunt-tui"
 
 default-run = "terragrunt-tui"
 
