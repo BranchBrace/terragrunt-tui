@@ -347,12 +347,58 @@ fn spawn_reader<R: Read + Send + 'static>(
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         for line in BufReader::new(stream).lines() {
-            let line = line.unwrap_or_else(|error| format!("[output read error: {error}]"));
+            let line = line
+                .map(|line| strip_ansi(&line))
+                .unwrap_or_else(|error| format!("[output read error: {error}]"));
             if sender.send(line).is_err() {
                 break;
             }
         }
     })
+}
+
+/// Retire les séquences d'échappement terminal (couleurs CSI, liens OSC) que Terraform
+/// émet dans ses journaux : le panneau les afficherait sinon en clair.
+fn strip_ansi(line: &str) -> String {
+    let mut output = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(character) = chars.next() {
+        if character != '\u{1b}' {
+            output.push(character);
+            continue;
+        }
+        match chars.next() {
+            Some('[') => {
+                for code in chars.by_ref() {
+                    if ('\u{40}'..='\u{7e}').contains(&code) {
+                        break;
+                    }
+                }
+            }
+            Some(']') => {
+                while let Some(code) = chars.next() {
+                    if code == '\u{7}' || (code == '\u{1b}' && chars.next_if_eq(&'\\').is_some()) {
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    output
+}
+
+/// Chemin tel qu'affiché à l'utilisateur, sans le préfixe verbatim `\\?\` que
+/// `canonicalize` ajoute sous Windows.
+pub fn display_path(path: &Path) -> String {
+    let text = path.display().to_string();
+    if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{unc}")
+    } else if let Some(local) = text.strip_prefix(r"\\?\") {
+        local.to_string()
+    } else {
+        text
+    }
 }
 
 fn matching_logs(lines: &[String], unit_path: &str) -> Vec<String> {
@@ -394,6 +440,34 @@ fn normalize_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn log_lines_lose_terminal_escape_sequences() {
+        assert_eq!(
+            strip_ansi(
+                "\u{1b}[1m# terraform_data.redis\u{1b}[0m will be \u{1b}[32mcreated\u{1b}[0m"
+            ),
+            "# terraform_data.redis will be created"
+        );
+        assert_eq!(
+            strip_ansi("\u{1b}]8;;https://example.test\u{7}lien\u{1b}]8;;\u{1b}\\ fin"),
+            "lien fin"
+        );
+        assert_eq!(strip_ansi("aucun échappement"), "aucun échappement");
+    }
+
+    #[test]
+    fn displayed_paths_drop_the_windows_verbatim_prefix() {
+        assert_eq!(
+            display_path(Path::new(r"\\?\C:\Users\Public\infra")),
+            r"C:\Users\Public\infra"
+        );
+        assert_eq!(
+            display_path(Path::new(r"\\?\UNC\serveur\partage\infra")),
+            r"\\serveur\partage\infra"
+        );
+        assert_eq!(display_path(Path::new("/srv/infra")), "/srv/infra");
+    }
 
     #[test]
     fn plan_invocation_is_fixed_to_run_all_plan() {
