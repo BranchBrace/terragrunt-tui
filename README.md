@@ -84,4 +84,4 @@ cargo build --locked
 
 Les tests utilisent un Terragrunt simulé, des JSON synthétiques et le backend terminal de Ratatui ; aucun plan d’infrastructure réel n’est exécuté. Voir `docs/specs/structured-plan-spike.md` pour les limites d’intégration.
 
-Propriétaire, tous droits réservés : voir `LICENSE`.
+MIT : voir `LICENSE`.
