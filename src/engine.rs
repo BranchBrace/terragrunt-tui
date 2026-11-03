@@ -424,11 +424,10 @@ mod tests {
 
     #[cfg(unix)]
     fn fake_terragrunt(tools: &Path) -> PathBuf {
-        use std::os::unix::fs::PermissionsExt;
-
+        let source = tools.join("terragrunt-fake.py");
         let binary = tools.join("terragrunt-fake");
         fs::write(
-            &binary,
+            &source,
             r##"#!/usr/bin/env python3
 import json, pathlib, subprocess, sys, time
 args = sys.argv[1:]
@@ -449,7 +448,15 @@ else:
 "##,
         )
         .unwrap();
-        fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
+        // L'exécutable est écrit par un processus séparé : écrit ici, son descripteur ouvert
+        // serait hérité par le fork d'un test parallèle et l'exec échouerait (ETXTBSY).
+        let installed = Command::new("install")
+            .args(["-m", "700"])
+            .arg(&source)
+            .arg(&binary)
+            .status()
+            .unwrap();
+        assert!(installed.success());
         binary
     }
 
