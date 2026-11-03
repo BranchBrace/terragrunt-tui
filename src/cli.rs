@@ -85,7 +85,11 @@ fn run(
 ) -> Result<i32, Box<dyn std::error::Error>> {
     let root = cwd.canonicalize()?;
     if !root.is_dir() {
-        return Err(format!("working directory is not a directory: {}", root.display()).into());
+        return Err(format!(
+            "working directory is not a directory: {}",
+            engine::display_path(&root)
+        )
+        .into());
     }
     cleanup_stale_if_confirmed()?;
     let units = engine::discover(terragrunt, &root)?;
@@ -102,7 +106,7 @@ fn run(
     let mut session = ui::TerminalSession::new()?;
     let confirmed = ui::confirm_plan(
         &mut session.terminal,
-        &root.display().to_string(),
+        &engine::display_path(&root),
         &display_command,
         &units,
         &workspace.path().display().to_string(),
