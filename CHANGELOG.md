@@ -1,3 +1,10 @@
+# [1.1.0-rc.5](https://github.com/BranchBrace/terragrunt-tui/compare/v1.1.0-rc.4...v1.1.0-rc.5) (2026-11-04)
+
+
+### Bug Fixes
+
+* **ui:** strip terminal escapes from logs and Windows verbatim prefix from root ([388e6e0](https://github.com/BranchBrace/terragrunt-tui/commit/388e6e03c5526c6b80b3189d90ab004373564906))
+
 # [1.1.0-rc.4](https://github.com/MonniHermes/terragrunt-tui/compare/v1.1.0-rc.3...v1.1.0-rc.4) (2026-11-02)
 
 
