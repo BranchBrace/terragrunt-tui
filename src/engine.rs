@@ -29,6 +29,18 @@ impl std::fmt::Display for EngineError {
 
 impl std::error::Error for EngineError {}
 
+/// Live progress delivered by [`execute_plan`] while Terragrunt runs.
+///
+/// `line` is the raw output line just received (stdout or stderr) so the UI can
+/// stream the logs as they appear. `unit` is set the first time a unit path is
+/// recognised in the output. A tick with neither field lets the caller poll
+/// for cancellation while Terragrunt is silent.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PlanProgress {
+    pub line: Option<String>,
+    pub unit: Option<String>,
+}
+
 impl From<std::io::Error> for EngineError {
     fn from(value: std::io::Error) -> Self {
         Self::Io(value)
@@ -152,7 +164,7 @@ pub fn execute_plan<F>(
     progress: &mut F,
 ) -> Result<RunResult, EngineError>
 where
-    F: FnMut(Option<String>) -> bool,
+    F: FnMut(PlanProgress) -> bool,
 {
     let root = root.canonicalize()?;
     fs::create_dir_all(&workspace.plan_dir)?;
@@ -186,22 +198,23 @@ where
     drop(sender);
     let mut log_lines = Vec::new();
     let mut reported_units = BTreeSet::new();
-    let mut cancelled = !progress(None);
+    let mut cancelled = !progress(PlanProgress::default());
     while !cancelled {
-        let mut active = None;
+        let mut event = PlanProgress::default();
         match receiver.recv_timeout(Duration::from_millis(100)) {
             Ok(line) => {
                 if let Some(unit) = units.iter().find(|unit| line.contains(&unit.path))
                     && reported_units.insert(unit.path.clone())
                 {
-                    active = Some(unit.path.clone());
+                    event.unit = Some(unit.path.clone());
                 }
+                event.line = Some(line.clone());
                 log_lines.push(line);
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
-        if !progress(active) {
+        if !progress(event) {
             cancelled = true;
         }
     }
@@ -334,12 +347,58 @@ fn spawn_reader<R: Read + Send + 'static>(
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         for line in BufReader::new(stream).lines() {
-            let line = line.unwrap_or_else(|error| format!("[output read error: {error}]"));
+            let line = line
+                .map(|line| strip_ansi(&line))
+                .unwrap_or_else(|error| format!("[output read error: {error}]"));
             if sender.send(line).is_err() {
                 break;
             }
         }
     })
+}
+
+/// Retire les séquences d'échappement terminal (couleurs CSI, liens OSC) que Terraform
+/// émet dans ses journaux : le panneau les afficherait sinon en clair.
+fn strip_ansi(line: &str) -> String {
+    let mut output = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(character) = chars.next() {
+        if character != '\u{1b}' {
+            output.push(character);
+            continue;
+        }
+        match chars.next() {
+            Some('[') => {
+                for code in chars.by_ref() {
+                    if ('\u{40}'..='\u{7e}').contains(&code) {
+                        break;
+                    }
+                }
+            }
+            Some(']') => {
+                while let Some(code) = chars.next() {
+                    if code == '\u{7}' || (code == '\u{1b}' && chars.next_if_eq(&'\\').is_some()) {
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    output
+}
+
+/// Chemin tel qu'affiché à l'utilisateur, sans le préfixe verbatim `\\?\` que
+/// `canonicalize` ajoute sous Windows.
+pub fn display_path(path: &Path) -> String {
+    let text = path.display().to_string();
+    if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{unc}")
+    } else if let Some(local) = text.strip_prefix(r"\\?\") {
+        local.to_string()
+    } else {
+        text
+    }
 }
 
 fn matching_logs(lines: &[String], unit_path: &str) -> Vec<String> {
@@ -383,6 +442,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn log_lines_lose_terminal_escape_sequences() {
+        assert_eq!(
+            strip_ansi(
+                "\u{1b}[1m# terraform_data.redis\u{1b}[0m will be \u{1b}[32mcreated\u{1b}[0m"
+            ),
+            "# terraform_data.redis will be created"
+        );
+        assert_eq!(
+            strip_ansi("\u{1b}]8;;https://example.test\u{7}lien\u{1b}]8;;\u{1b}\\ fin"),
+            "lien fin"
+        );
+        assert_eq!(strip_ansi("aucun échappement"), "aucun échappement");
+    }
+
+    #[test]
+    fn displayed_paths_drop_the_windows_verbatim_prefix() {
+        assert_eq!(
+            display_path(Path::new(r"\\?\C:\Users\Public\infra")),
+            r"C:\Users\Public\infra"
+        );
+        assert_eq!(
+            display_path(Path::new(r"\\?\UNC\serveur\partage\infra")),
+            r"\\serveur\partage\infra"
+        );
+        assert_eq!(display_path(Path::new("/srv/infra")), "/srv/infra");
+    }
+
+    #[test]
     fn plan_invocation_is_fixed_to_run_all_plan() {
         let args = exact_plan_command(
             "terragrunt",
@@ -411,11 +498,10 @@ mod tests {
 
     #[cfg(unix)]
     fn fake_terragrunt(tools: &Path) -> PathBuf {
-        use std::os::unix::fs::PermissionsExt;
-
+        let source = tools.join("terragrunt-fake.py");
         let binary = tools.join("terragrunt-fake");
         fs::write(
-            &binary,
+            &source,
             r##"#!/usr/bin/env python3
 import json, pathlib, subprocess, sys, time
 args = sys.argv[1:]
@@ -436,7 +522,15 @@ else:
 "##,
         )
         .unwrap();
-        fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
+        // L'exécutable est écrit par un processus séparé : écrit ici, son descripteur ouvert
+        // serait hérité par le fork d'un test parallèle et l'exec échouerait (ETXTBSY).
+        let installed = Command::new("install")
+            .args(["-m", "700"])
+            .arg(&source)
+            .arg(&binary)
+            .status()
+            .unwrap();
+        assert!(installed.success());
         binary
     }
 
@@ -451,14 +545,18 @@ else:
         let workspace = RunWorkspace::new().unwrap();
         let workspace_path = workspace.path().to_path_buf();
         let mut progress = Vec::new();
+        let mut streamed_lines = Vec::new();
         let result = execute_plan(
             &terragrunt,
             fixture.path(),
             &units,
             &workspace,
-            &mut |unit| {
-                if let Some(unit) = unit {
+            &mut |event| {
+                if let Some(unit) = event.unit {
                     progress.push(unit);
+                }
+                if let Some(line) = event.line {
+                    streamed_lines.push(line);
                 }
                 true
             },
@@ -469,6 +567,7 @@ else:
         assert_eq!(result.totals.as_ref().unwrap().added, 1);
         assert_eq!(result.modules[0].resources[0].after["token"], "[REDACTED]");
         assert_eq!(progress, vec!["prod/app"]);
+        assert_eq!(streamed_lines, vec!["Running command in prod/app"]);
         assert!(
             !serde_json::to_string(&result)
                 .unwrap()
@@ -541,7 +640,7 @@ else:
             fixture.path(),
             &units,
             &workspace,
-            &mut |unit| unit.is_none(),
+            &mut |event| event.line.is_none() && event.unit.is_none(),
         )
         .unwrap();
 

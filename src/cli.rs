@@ -1,4 +1,4 @@
-use crate::{engine, model, ui};
+use crate::{engine, model, ui, update};
 use clap::{Parser, Subcommand};
 use std::fs::{self, OpenOptions};
 use std::io::{self, IsTerminal};
@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 #[derive(Parser)]
 #[command(
     name = "terragrunt-tui",
-    about = "Local, read-only Terragrunt plan review"
+    about = "Local, read-only Terragrunt plan review",
+    version = VERSION
 )]
 struct Cli {
     #[command(subcommand)]
@@ -30,12 +31,29 @@ enum Command {
         #[arg(long, default_value = ".terragrunt-tui/latest.json")]
         run: PathBuf,
     },
+    /// Install the latest GitHub release (the latest release candidate with `--rc`).
+    Update {
+        #[arg(long)]
+        rc: bool,
+    },
+    /// Print the installed version.
+    Version,
 }
+
+/// Version embedded by `build.rs`.
+const VERSION: &str = env!("TTUI_VERSION");
 
 /// Entry point shared by the `terragrunt-tui` and `ttui` binaries.
 pub fn main() {
     let code = match execute(Cli::parse()) {
         Ok(code) => code,
+        Err(error)
+            if error
+                .downcast_ref::<io::Error>()
+                .is_some_and(|error| error.kind() == io::ErrorKind::Interrupted) =>
+        {
+            130
+        }
         Err(error) => {
             eprintln!("terragrunt-tui: {error}");
             2
@@ -52,6 +70,11 @@ fn execute(cli: Cli) -> Result<i32, Box<dyn std::error::Error>> {
             output,
         } => run(cwd, &terragrunt, output),
         Command::Show { run } => show(run),
+        Command::Update { rc } => update::run(rc),
+        Command::Version => {
+            println!("terragrunt-tui {VERSION}");
+            Ok(0)
+        }
     }
 }
 
@@ -62,7 +85,11 @@ fn run(
 ) -> Result<i32, Box<dyn std::error::Error>> {
     let root = cwd.canonicalize()?;
     if !root.is_dir() {
-        return Err(format!("working directory is not a directory: {}", root.display()).into());
+        return Err(format!(
+            "working directory is not a directory: {}",
+            engine::display_path(&root)
+        )
+        .into());
     }
     cleanup_stale_if_confirmed()?;
     let units = engine::discover(terragrunt, &root)?;
@@ -79,7 +106,7 @@ fn run(
     let mut session = ui::TerminalSession::new()?;
     let confirmed = ui::confirm_plan(
         &mut session.terminal,
-        &root.display().to_string(),
+        &engine::display_path(&root),
         &display_command,
         &units,
         &workspace.path().display().to_string(),
@@ -90,17 +117,22 @@ fn run(
 
     let mut completed = 0usize;
     let mut current = None;
+    let mut logs = Vec::new();
     let mut progress_error = None;
-    let result = engine::execute_plan(terragrunt, &root, &units, &workspace, &mut |path| {
-        if let Some(path) = path {
+    let result = engine::execute_plan(terragrunt, &root, &units, &workspace, &mut |event| {
+        if let Some(path) = event.unit {
             completed = completed.saturating_add(1);
             current = Some(path);
+        }
+        if let Some(line) = event.line {
+            logs.push(line);
         }
         match ui::show_progress(
             &mut session.terminal,
             current.as_deref(),
             completed,
             units.len(),
+            &logs,
         ) {
             Ok(keep_running) => keep_running,
             Err(error) => {

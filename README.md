@@ -2,6 +2,16 @@
 
 CLI/TUI locale et en lecture seule pour préparer et inspecter un `terragrunt run --all plan`. Terragrunt TUI découvre les unités avant l’exécution, montre la commande exacte, puis agrège les changements depuis les JSON de plan structurés. Il n’exécute jamais `apply` ni `destroy` et ne contacte aucun service distant.
 
+**Run complet** : confirmation des unités triées par vagues, journaux Terragrunt en direct, puis revue.
+
+![Run Terragrunt TUI sur la fixture de démo](docs/demo/run.gif)
+
+**Revue d’un résultat sauvegardé** : Modules → Ressources → Modifications, diff ciblé et recherche.
+
+![Revue Terragrunt TUI du résultat synthétique](docs/demo/review.gif)
+
+Ces GIFs se régénèrent avec `bash docs/demo/record.sh` (VHS, ttyd et ffmpeg requis) ; le run filme la fixture `docs/demo/fixture`.
+
 ## Prérequis et limites de compatibilité
 
 - Rust 1.88+ et Cargo.
@@ -17,21 +27,25 @@ cargo install --path .
 
 Installe deux commandes équivalentes : `terragrunt-tui` et son alias court `ttui`.
 
+`ttui version` (ou `ttui --version`) affiche la version installée : le tag de release pour une installation depuis un tag, le `git describe` du commit (`1.1.0-rc.3-2-gabc1234-dirty`) pour un build local du dépôt.
+
 ## Exécuter
 
-Depuis la racine du dépôt, dans un terminal interactif. Remplacer `./fixture-terragrunt-jetable` par le chemin d’une fixture locale jetable (aucune fixture Terragrunt n’est fournie dans le dépôt) :
+Depuis la racine du dépôt, dans un terminal interactif. La fixture `docs/demo/fixture` (cinq unités `terraform_data`, état local, aucun provider à télécharger) permet un premier essai ; pour un autre projet, pointer `--cwd` vers une fixture locale jetable :
 
 ```sh
-cargo run -- run --cwd ./fixture-terragrunt-jetable
+cargo run -- run --cwd docs/demo/fixture
 ```
 
-Terragrunt TUI découvre d’abord les unités puis affiche, avant toute exécution, la liste complète des modules triés par vagues de dépendances. Les vagues inconnues restent identifiées comme telles ; elles ne sont jamais déduites des journaux. Parcourir cette liste avec ↑/↓, PgUp/PgDn, Home/End ; Entrée confirme le plan affiché, `q` ou Échap annule. La vue précise que ces vagues représentent les dépendances, pas l’ordre runtime garanti. Pendant le plan, `q`, Échap ou Ctrl-C interrompent le processus et marquent le résultat incomplet. Après le run, le parcours de revue propose trois panneaux : Modules → Ressources → Modifications.
+Terragrunt TUI découvre d’abord les unités puis affiche, avant toute exécution, la liste complète des modules triés par vagues de dépendances. Les vagues inconnues restent identifiées comme telles ; elles ne sont jamais déduites des journaux. Parcourir cette liste avec ↑/↓, PgUp/PgDn, Home/End ; Entrée confirme le plan affiché, `q` ou Échap annule. La vue précise que ces vagues représentent les dépendances, pas l’ordre runtime garanti. Pendant le plan, les journaux bruts de Terragrunt défilent en direct dans l’écran d’exécution : ils sont toujours visibles, sans option pour les cacher. `q`, Échap ou Ctrl-C interrompent le processus et marquent le résultat incomplet. Après le run, le parcours de revue propose trois panneaux : Modules → Ressources → Modifications.
 
 Pour ouvrir un résultat Terragrunt TUI déjà sauvegardé :
 
 ```sh
 cargo run -- show --run ./.terragrunt-tui/latest.json
 ```
+
+Pour découvrir la revue sans Terragrunt, un résultat synthétique est fourni : `cargo run -- show --run docs/specs/fixtures/demo-run.json`.
 
 Par défaut, `run` écrit le résultat redacted dans `.terragrunt-tui/latest.json` sans écraser un fichier existant. `--output PATH` choisit un autre chemin ; `show --run PATH` ouvre ce fichier. La commande `run` exige un terminal interactif afin qu’aucun plan ne parte sans confirmation visible.
 
@@ -44,7 +58,7 @@ Par défaut, `run` écrit le résultat redacted dans `.terragrunt-tui/latest.jso
 | `↑` / `↓` | Parcourir les éléments du panneau focalisé. |
 | `/` | Rechercher un module ou une ressource ; Entrée valide le filtre, Échap le termine. |
 | `d` | Basculer entre les valeurs before/after et un diff ciblé. |
-| `l` | Afficher ou masquer les journaux du processus en mémoire. Ils sont masqués par défaut et absents du JSON sauvegardé. |
+| `l` | Dans la revue après le run, afficher ou masquer les journaux du module sélectionné conservés en mémoire. Ils sont absents du JSON sauvegardé. |
 | `q` | Quitter la revue. |
 
 Les compteurs ont des libellés textuels et des couleurs : `ADD` vert, `DELETE` rouge, `CHANGE`/`REPLACE` orange, `UNKNOWN` rose/magenta. Le statut reste lisible sans couleur. Le diff est calculé uniquement depuis les données structurées et n’invente rien si le before/after manque.
@@ -65,7 +79,7 @@ Depuis la racine du dépôt :
 - Git Bash : installer Rust/Cargo et Terragrunt pour cet environnement, puis utiliser la même commande.
 - PowerShell : installer Rust/Cargo et Terragrunt, puis `cargo run -- run --cwd .\fixture-terragrunt-jetable`.
 
-Dans chaque cas, remplacer ce chemin par la fixture jetable créée localement ; aucune fixture n’est fournie dans le dépôt.
+Dans chaque cas, remplacer ce chemin par une fixture jetable, par exemple `docs/demo/fixture`.
 
 L’agent vérifie uniquement Linux. WSL était indisponible lors du retour précédent ; Git Bash n’a pas été retesté sur la nouvelle version ; l’interface PowerShell était jugée insuffisante sur la version précédente. Ces plateformes ne sont pas revendiquées vérifiées. Après livraison, utiliser seulement une fixture jetable et consigner séparément pour chaque shell les versions, la confirmation, progression, navigation, recherche, changements, erreurs, redaction et nettoyage.
 
@@ -80,4 +94,4 @@ cargo build --locked
 
 Les tests utilisent un Terragrunt simulé, des JSON synthétiques et le backend terminal de Ratatui ; aucun plan d’infrastructure réel n’est exécuté. Voir `docs/specs/structured-plan-spike.md` pour les limites d’intégration.
 
-Propriétaire, tous droits réservés : voir `LICENSE`.
+MIT : voir `LICENSE`.

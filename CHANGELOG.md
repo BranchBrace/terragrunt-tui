@@ -1,3 +1,39 @@
+# [1.1.0-rc.5](https://github.com/BranchBrace/terragrunt-tui/compare/v1.1.0-rc.4...v1.1.0-rc.5) (2026-11-04)
+
+
+### Bug Fixes
+
+* **ui:** strip terminal escapes from logs and Windows verbatim prefix from root ([388e6e0](https://github.com/BranchBrace/terragrunt-tui/commit/388e6e03c5526c6b80b3189d90ab004373564906))
+
+# [1.1.0-rc.4](https://github.com/MonniHermes/terragrunt-tui/compare/v1.1.0-rc.3...v1.1.0-rc.4) (2026-11-02)
+
+
+### Features
+
+* **cli:** ajouter la commande version et --version ([ec9eeec](https://github.com/MonniHermes/terragrunt-tui/commit/ec9eeecb761e6745f6d58974f0d390cc512f9f85))
+
+# [1.1.0-rc.3](https://github.com/MonniHermes/terragrunt-tui/compare/v1.1.0-rc.2...v1.1.0-rc.3) (2026-11-01)
+
+
+### Features
+
+* **cli:** ttui update [--rc] et sortie par Ctrl+C sur tous les écrans ([1744972](https://github.com/MonniHermes/terragrunt-tui/commit/174497239dcff51ec2a70bac7cc95a6d7e60ca80))
+* **ui:** navigation accélérée, tri des ressources par statut et légende ([8547e30](https://github.com/MonniHermes/terragrunt-tui/commit/8547e30daa7e5c8bf37b243696d53fb1941161bb))
+
+# [1.1.0-rc.2](https://github.com/MonniHermes/terragrunt-tui/compare/v1.1.0-rc.1...v1.1.0-rc.2) (2026-11-01)
+
+
+### Features
+
+* **ui:** afficher les journaux Terragrunt en direct pendant le plan ([09bde20](https://github.com/MonniHermes/terragrunt-tui/commit/09bde2022e11da5df92b5c5768997612fbd059c2))
+
+# [1.1.0-rc.1](https://github.com/MonniHermes/terragrunt-tui/compare/v1.0.0...v1.1.0-rc.1) (2026-11-01)
+
+
+### Features
+
+* **ui:** two-pane review with wave tree, git-style diff and ELIA36 theme ([0a2bd9f](https://github.com/MonniHermes/terragrunt-tui/commit/0a2bd9f884477663a3681ea8ec5a0ea8e6c313b0))
+
 # 1.0.0 (2026-11-01)
 
 

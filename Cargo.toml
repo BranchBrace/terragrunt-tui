@@ -1,10 +1,11 @@
 [package]
 name = "terragrunt-tui"
-version = "0.2.0"
+version = "1.1.0-rc.5"
 edition = "2024"
 rust-version = "1.88"
-license = "LicenseRef-Proprietary"
+license = "MIT"
 description = "Local read-only Terragrunt plan aggregator CLI and TUI"
+repository = "https://github.com/BranchBrace/terragrunt-tui"
 
 default-run = "terragrunt-tui"
 
