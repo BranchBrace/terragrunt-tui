@@ -21,7 +21,31 @@ Ces GIFs se régénèrent avec `bash docs/demo/record.sh` (VHS, ttyd et ffmpeg r
 
 ## Installer
 
+### Ubuntu / Debian (WSL compris) — dépôt apt
+
+Une seule fois, déclarer le dépôt et sa clé de signature :
+
 ```sh
+curl -fsSL https://branchbrace.github.io/terragrunt-tui/terragrunt-tui.gpg \
+  | sudo tee /usr/share/keyrings/terragrunt-tui.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/terragrunt-tui.gpg] https://branchbrace.github.io/terragrunt-tui stable main" \
+  | sudo tee /etc/apt/sources.list.d/terragrunt-tui.list
+```
+
+Puis installer, et mettre à jour avec le reste du système :
+
+```sh
+sudo apt update && sudo apt install terragrunt-tui
+sudo apt upgrade
+```
+
+Le canal `stable` suit les releases de `main` ; remplacer `stable` par `rc` dans la ligne `deb` pour suivre aussi les prereleases. Les binaires sont statiques (musl, amd64) : aucune dépendance système, quelle que soit la version d’Ubuntu. Chaque release GitHub porte aussi le `.deb` et une archive `.tar.gz` des binaires.
+
+### Depuis les sources
+
+```sh
+cargo install --git https://github.com/BranchBrace/terragrunt-tui --tag v1.1.0 --locked
+# ou, depuis un clone du dépôt :
 cargo install --path .
 ```
 

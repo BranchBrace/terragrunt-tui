@@ -68,14 +68,25 @@ jobs:
     needs: [semgrep, quality]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    # rc and main both rewrite the gh-pages apt repository: never publish them at once.
+    concurrency: {group: apt-repository, cancel-in-progress: false}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {fetch-depth: 0}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: {node-version: 22}
+      - uses: actions-rust-lang/setup-rust-toolchain@ac90e63697ac2784f4ecfe2964e1a285c304003a # v1.14.1
+        with:
+          toolchain: stable
+          target: x86_64-unknown-linux-musl
+      - name: Linux packaging tools (musl, apt-ftparchive)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools apt-utils
       - run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: Semantic release (rc = prerelease, main = stable)
         run: >-
           npx -y -p semantic-release@24 -p @semantic-release/changelog@6 -p @semantic-release/git@10
           -p @semantic-release/exec@6 semantic-release
-        env: {GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"}
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          APT_GPG_PRIVATE_KEY: "${{ secrets.APT_GPG_PRIVATE_KEY }}"
+          APT_GPG_PASSPHRASE: "${{ secrets.APT_GPG_PASSPHRASE }}"

@@ -1551,7 +1551,7 @@ dependencies = [
 
 [[package]]
 name = "terragrunt-tui"
-version = "1.1.0-rc.5"
+version = "1.1.0"
 dependencies = [
  "clap",
  "crossterm",

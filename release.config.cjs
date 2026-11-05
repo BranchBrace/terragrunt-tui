@@ -16,9 +16,13 @@ module.exports = {
       prepareCmd: onMain
         ? './scripts/set-version.sh ${nextRelease.version} && ./scripts/commit-release-branch.sh ${nextRelease.version}'
         : './scripts/set-version.sh ${nextRelease.version}',
-      publishCmd: './scripts/release-images.sh ${nextRelease.version}',
+      publishCmd: './scripts/release-images.sh ${nextRelease.version}'
+        + ' && ./scripts/build-deb.sh ${nextRelease.version}'
+        + ' && ./scripts/publish-apt.sh ${nextRelease.version}',
     }],
-    '@semantic-release/github',
+    ['@semantic-release/github', {
+      assets: [{ path: 'dist/*.deb' }, { path: 'dist/*.tar.gz' }],
+    }],
     ...(onMain ? [] : [['@semantic-release/git', {
       assets: ['CHANGELOG.md', 'Cargo.toml', 'Cargo.lock'],
       message: notes,
