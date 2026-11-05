@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/BranchBrace/terragrunt-tui/compare/v1.1.0...v1.2.0) (2026-11-05)
+
+
+### Features
+
+* **release:** publier un dépôt apt signé sur GitHub Pages ([92b7d7b](https://github.com/BranchBrace/terragrunt-tui/commit/92b7d7b8b43d53797526c0f6c139f105c5b50d4b)), closes [#pages](https://github.com/BranchBrace/terragrunt-tui/issues/pages) [#pages](https://github.com/BranchBrace/terragrunt-tui/issues/pages)
+
 # [1.2.0-rc.1](https://github.com/BranchBrace/terragrunt-tui/compare/v1.1.0...v1.2.0-rc.1) (2026-11-05)
 
 
