@@ -1,3 +1,10 @@
+# [1.2.0-rc.2](https://github.com/BranchBrace/terragrunt-tui/compare/v1.2.0-rc.1...v1.2.0-rc.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* **ui:** masquer le diff hors focus détail et vagues sans en-tête bloc ([8bcb21a](https://github.com/BranchBrace/terragrunt-tui/commit/8bcb21aa932f5adca5cbb9c9d7438229cd44d125))
+
 # [1.2.0-rc.1](https://github.com/BranchBrace/terragrunt-tui/compare/v1.1.0...v1.2.0-rc.1) (2026-11-05)
 
 
