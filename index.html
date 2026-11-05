@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>terragrunt-tui apt repository</title>
+<h1>terragrunt-tui apt repository</h1>
+<pre>
+curl -fsSL https://branchbrace.github.io/terragrunt-tui/terragrunt-tui.gpg \
+  | sudo tee /usr/share/keyrings/terragrunt-tui.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/terragrunt-tui.gpg] https://branchbrace.github.io/terragrunt-tui stable main" \
+  | sudo tee /etc/apt/sources.list.d/terragrunt-tui.list
+sudo apt update &amp;&amp; sudo apt install terragrunt-tui
+</pre>
+<p>Use <code>rc</code> instead of <code>stable</code> to follow prereleases.</p>

@@ -1,0 +1,54 @@
+Package: terragrunt-tui
+Architecture: amd64
+Version: 1.2.0~rc.1
+Priority: optional
+Section: devel
+Maintainer: BranchBrace <noreply@github.com>
+Installed-Size: 3632
+Filename: pool/rc/terragrunt-tui_1.2.0~rc.1_amd64.deb
+Size: 707178
+MD5sum: f8db7a39c014ad0d23e8c3dd87f43760
+SHA1: aea817eec59fdcf1e9061e3771473e69f9f6bee7
+SHA256: 867775cc2260aa80f3b7340a0263685f7e7c66156e1760cb13e90ce9c93f4762
+SHA512: 85e8ebafb7da7de6ea4cfd5329ad86b66cb003448ec0b37937ddcd3ee5ffc4399d961b512c7736ad1a032e9629853a1660872312602b7005d1163dd08dbb5719
+Homepage: https://github.com/BranchBrace/terragrunt-tui
+Description: Local read-only Terragrunt plan aggregator CLI and TUI
+ Runs terragrunt plan across a stack and reviews the result in a terminal UI.
+ Installs the terragrunt-tui command and its short alias ttui.
+
+Package: terragrunt-tui
+Architecture: amd64
+Version: 1.2.0~rc.2
+Priority: optional
+Section: devel
+Maintainer: BranchBrace <noreply@github.com>
+Installed-Size: 3624
+Filename: pool/rc/terragrunt-tui_1.2.0~rc.2_amd64.deb
+Size: 706074
+MD5sum: 07b77aca46feaeaf27c59bc07769bbd7
+SHA1: a6b348f4904259fa17e045b486149af777bc683c
+SHA256: 5df84ad07de88e7564c6f4007aba8ff9e197efd8aa272ae2445ac487da57ebb7
+SHA512: 7c917b4f7645d01d9f74690c7f0410a2d229a4747eaccf21e9f99503fd9c90e22474a13dabe0b8abe6f01832a1c6ab9955b049b073161aca2072256b2097bfcf
+Homepage: https://github.com/BranchBrace/terragrunt-tui
+Description: Local read-only Terragrunt plan aggregator CLI and TUI
+ Runs terragrunt plan across a stack and reviews the result in a terminal UI.
+ Installs the terragrunt-tui command and its short alias ttui.
+
+Package: terragrunt-tui
+Architecture: amd64
+Version: 1.2.0
+Priority: optional
+Section: devel
+Maintainer: BranchBrace <noreply@github.com>
+Installed-Size: 3632
+Filename: pool/stable/terragrunt-tui_1.2.0_amd64.deb
+Size: 707220
+MD5sum: b8888ccf8cbce726ad22a2c5976284f1
+SHA1: 99016c8ecbc3dd18bac03c3948cc7a73a2bfedb7
+SHA256: b196a71330bd3e4c9a925eacda5ac293776a167c304d814da349b1649ea869e2
+SHA512: 1762c4918e1f7cecedf2679b5ed7b95b0917cec72a473696354921cdd860cce7061d5b6d1a913cdf37ea8ce24a556eb9f96f1aca1ab142a91b4a20d7089e5d4a
+Homepage: https://github.com/BranchBrace/terragrunt-tui
+Description: Local read-only Terragrunt plan aggregator CLI and TUI
+ Runs terragrunt plan across a stack and reviews the result in a terminal UI.
+ Installs the terragrunt-tui command and its short alias ttui.
+

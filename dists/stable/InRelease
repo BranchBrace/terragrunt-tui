@@ -1,0 +1,33 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: amd64
+Codename: stable
+Components: main
+Date: Thu, 05 Nov 2026 19:57:54 +0000
+Label: terragrunt-tui
+Origin: terragrunt-tui
+Suite: stable
+MD5Sum:
+ f4f430f49f17c321f1163f7cfc715aff             1462 Release
+ ac6ca8b2f60fa73e839490f580c26d84              789 main/binary-amd64/Packages
+ 76d3bb8d93a7923d7e03545338414d91              528 main/binary-amd64/Packages.gz
+SHA1:
+ d4f66fcabe1eba0c14ddb80ba3ceca76895367c1             1462 Release
+ 0f30539dc3fbc4d63e7ea6d792219c2684b9f45d              789 main/binary-amd64/Packages
+ ef76b7dfecc32ca427344441a88b6d608a3c4d4c              528 main/binary-amd64/Packages.gz
+SHA256:
+ 96eafbe94d7be006a943d707d5b54ea87b24ff6d9602047fef8ea20b8456d256             1462 Release
+ d5d7f1dbd19d522d6ca86931b83438697873b06c8b2486c057f622eca1ffe2e3              789 main/binary-amd64/Packages
+ d465e39d7242cc366c6bd3323270835fcf1d93db76247273dda1f14e4329ccf3              528 main/binary-amd64/Packages.gz
+SHA512:
+ ad3686e4d0a34904631d6db4bc011a450961ea84d4e0b8fe642ec273f15fa9571d1a68f27be46d9e4f77cd90a444d6090d42b0f7ff869e33d4cb66c138a48f96             1462 Release
+ fbc1abe97e54a997bf99a0faf539fac81c138303d9bc5374b191d4136dbe3776e41f7c836aad1ccf7d775fbc9705b66856355ab2532d26e0f1eb4c01f9d129e8              789 main/binary-amd64/Packages
+ 5f8296b9a7681ce861e524a60f46b6ccd1bee58457da711818dde5390f871d7ebc6dd48a39118e171a19939c67b83212b7bc837f5e7a8dd7bb9ad0b92d02a632              528 main/binary-amd64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iHUEARYKAB0WIQR5oRagim9X46bmg0k6tJ8INWNWhAUCauzfwgAKCRA6tJ8INWNW
+hM1aAQD/XIL37U8hEWyiU23P0TPjRNKz/+xtj8NNQvRRUyzDKQEAwpjXBRvNJEyn
+A5cMFWYJQ3z1YoRZPIWZTikUbT8quQA=
+=fVLe
+-----END PGP SIGNATURE-----
