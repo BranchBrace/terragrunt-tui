@@ -1,0 +1,23 @@
+Architectures: amd64
+Codename: stable
+Components: main
+Date: Wed, 18 Nov 2026 19:09:52 +0000
+Label: terragrunt-tui
+Origin: terragrunt-tui
+Suite: stable
+MD5Sum:
+ e171df4c6c8e3bd044e9ebed8314254b             1462 Release
+ 71afedfda9f903d626417e82e17ceb5b             1578 main/binary-amd64/Packages
+ f2e115838515d2b6647601ff2c72bc9f              725 main/binary-amd64/Packages.gz
+SHA1:
+ 591167f8d6bfa15f0ca253dbb60a97242cda9166             1462 Release
+ 3bd6129b7b6c6ab20c3c3dbbaeefc51c1966fe44             1578 main/binary-amd64/Packages
+ 7c75976e07eede26776702f8183cc30931702367              725 main/binary-amd64/Packages.gz
+SHA256:
+ c231b52ac01ea581f502b7a3f779916ba642045e8e452f5117db43ad83648d3f             1462 Release
+ 09e0e365be9c5595e3eaf0b74af7efedffc19b0fceb8be92274bef7ba83a889f             1578 main/binary-amd64/Packages
+ fcfac040e29169a5a872e7eb8dd7a7f3b8549c781c58f71471290d32a92289b5              725 main/binary-amd64/Packages.gz
+SHA512:
+ 36995a4d024378736eebb4f99bfdad00549a65a856eee772254caa1e1a0f2f2800026f74389a129d487f67af894630547991b55f6e4be18b7dfb6f2e4ddf2705             1462 Release
+ 9c57b94001bec4e1c50a9487258c17fa7a4ba30ecccdefde710c0724dd52bd0812216923182f0301dcbe700b7cca7f4793dddbf5354930d46721a3b70f83b016             1578 main/binary-amd64/Packages
+ 1e4482f9f8f301bb825ba281d6fbf78a302929ac38b6611e2aa02b611aa01d063fffcc9f614eb0dc99996134e8a0c45afea01fec6f7d02367023bd3e97111037              725 main/binary-amd64/Packages.gz
