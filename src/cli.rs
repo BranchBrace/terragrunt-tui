@@ -1,4 +1,4 @@
-use crate::{engine, model, ui, update};
+use crate::{engine, model, store, ui, update};
 use clap::{Parser, Subcommand};
 use std::fs::{self, OpenOptions};
 use std::io::{self, IsTerminal};
@@ -45,7 +45,19 @@ const VERSION: &str = env!("TTUI_VERSION");
 
 /// Entry point shared by the `terragrunt-tui` and `ttui` binaries.
 pub fn main() {
-    let code = match execute(Cli::parse()) {
+    let code = match Cli::try_parse() {
+        Ok(cli) => outcome(execute(cli)),
+        Err(error) => {
+            let _ = error.print();
+            error.exit_code()
+        }
+    };
+    store::pause_if_console_closes_on_exit();
+    std::process::exit(code);
+}
+
+fn outcome(result: Result<i32, Box<dyn std::error::Error>>) -> i32 {
+    match result {
         Ok(code) => code,
         Err(error)
             if error
@@ -58,8 +70,7 @@ pub fn main() {
             eprintln!("terragrunt-tui: {error}");
             2
         }
-    };
-    std::process::exit(code);
+    }
 }
 
 fn execute(cli: Cli) -> Result<i32, Box<dyn std::error::Error>> {

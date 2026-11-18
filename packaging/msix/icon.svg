@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Icône de ttui : modules Terragrunt empilés par vagues, couleurs du thème (src/theme.rs). -->
+  <rect x="8" y="8" width="240" height="240" rx="44" fill="#242b4a"/>
+  <path d="M128 40 L216 84 L128 128 L40 84 Z" fill="#5fd3c8"/>
+  <path d="M40 128 L128 172 L216 128" fill="none" stroke="#ffac7f" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M40 172 L128 216 L216 172" fill="none" stroke="#5d8bb3" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

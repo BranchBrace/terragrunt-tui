@@ -5,6 +5,7 @@ mod diff;
 mod engine;
 mod graph;
 mod model;
+mod store;
 mod theme;
 mod ui;
 mod update;
