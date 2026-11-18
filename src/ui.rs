@@ -867,8 +867,7 @@ fn render_review(
         }
         Pane::Resources => Layout::horizontal([
             Constraint::Length(REDUCED_MODULES_WIDTH),
-            Constraint::Fill(2),
-            Constraint::Fill(3),
+            Constraint::Fill(1),
         ])
         .split(rows[0])
         .to_vec(),
@@ -956,13 +955,9 @@ fn render_modules_pane(
     let mut selection_rows = Vec::with_capacity(modules.len());
     for (position, index) in modules.iter().enumerate() {
         let item = &result.modules[*index];
-        let starts_wave = position == 0 || result.modules[modules[position - 1]].wave != item.wave;
         let ends_wave = modules
             .get(position + 1)
             .is_none_or(|next| result.modules[*next].wave != item.wave);
-        if starts_wave {
-            items.push(ListItem::new(wave_heading(item.wave, full)));
-        }
         selection_rows.push(items.len());
         items.push(ListItem::new(module_row(item, ends_wave, full, &columns)));
     }
@@ -973,21 +968,6 @@ fn render_modules_pane(
         list_area,
         &mut list_state,
     );
-}
-
-fn wave_heading(wave: Option<usize>, full: bool) -> Line<'static> {
-    let label = match (wave, full) {
-        (Some(number), true) => format!("VAGUE {number}"),
-        (None, true) => "VAGUE INCONNUE".to_owned(),
-        (Some(number), false) => format!("V{number}"),
-        (None, false) => "V?".to_owned(),
-    };
-    Line::from(Span::styled(
-        label,
-        Style::default()
-            .fg(theme::wave_color(wave))
-            .add_modifier(Modifier::BOLD),
-    ))
 }
 
 fn module_row(
@@ -1532,7 +1512,7 @@ mod tests {
     }
 
     #[test]
-    fn review_opens_on_two_panes_and_the_third_appears_on_the_right() {
+    fn review_stays_on_two_panes_until_changes_focus_reveals_the_third() {
         let mut planned = module("prod/app", "planned", Some(0), Some((1, 0, 0)));
         planned.resources.push(ResourceChange {
             address: "demo_item.example".into(),
@@ -1557,6 +1537,18 @@ mod tests {
         };
         draw(&mut terminal, &result, &state, &[0], &[0]);
         let text = screen_lines(&terminal).join("\n");
+        assert!(
+            !text.contains("Modifications"),
+            "le diff ne doit pas apparaître avant le focus détail"
+        );
+        assert!(text.contains("demo_item.example"));
+
+        let state = ReviewState {
+            pane: Pane::Changes,
+            ..ReviewState::default()
+        };
+        draw(&mut terminal, &result, &state, &[0], &[0]);
+        let text = screen_lines(&terminal).join("\n");
         assert!(text.contains("Modifications"));
         assert!(text.contains("+   \"name\": \"value\""));
     }
@@ -1573,7 +1565,7 @@ mod tests {
     }
 
     #[test]
-    fn module_listing_has_columns_wave_headings_and_tree_guides() {
+    fn module_listing_has_columns_and_wave_colored_tree_guides() {
         let result = run(vec![
             module("prod/db", "planned", Some(0), Some((1, 2, 0))),
             module("prod/cache", "no_changes", Some(0), Some((0, 0, 0))),
@@ -1594,29 +1586,55 @@ mod tests {
         assert!(text.contains("Path"));
         assert!(text.contains("Status"));
         assert!(text.contains("Δ"));
-        assert_eq!(text.matches("VAGUE 0").count(), 1);
-        assert_eq!(text.matches("VAGUE 1").count(), 1);
-        assert_eq!(text.matches("VAGUE INCONNUE").count(), 1);
+        assert!(
+            !text.contains("VAGUE"),
+            "aucune ligne d'en-tête de vague ne doit être rendue"
+        );
         assert!(text.contains("├─ prod/db"));
         assert!(text.contains("└─ prod/cache"));
+        assert!(text.contains("└─ prod/api"));
+        assert!(text.contains("└─ prod/unknown"));
         assert!(text.contains("NO CHANGES"));
         assert!(text.contains("FAILED"));
         assert!(text.contains("+1 ~2 -0"));
 
         let buffer = terminal.backend().buffer();
-        let heading_row = lines.iter().position(|l| l.contains("VAGUE 0")).unwrap();
-        let selected_row = lines.iter().position(|l| l.contains("├─ prod/db")).unwrap();
-        assert!(
-            lines[heading_row].starts_with("┃VAGUE 0"),
-            "{:?}",
-            lines[heading_row]
+        let wave0_row = lines.iter().position(|l| l.contains("├─ prod/db")).unwrap();
+        let wave1_row = lines
+            .iter()
+            .position(|l| l.contains("└─ prod/api"))
+            .unwrap();
+        let unknown_row = lines
+            .iter()
+            .position(|l| l.contains("└─ prod/unknown"))
+            .unwrap();
+        let guide_col = column(&lines[wave0_row], "├─");
+        assert_eq!(
+            buffer[(guide_col, wave0_row as u16)].fg,
+            theme::wave_color(Some(0))
         );
-        assert_eq!(buffer[(2, heading_row as u16)].bg, theme::BG);
-        assert_eq!(buffer[(2, selected_row as u16)].bg, theme::SELECTION);
+        assert_eq!(
+            buffer[(column(&lines[wave1_row], "└─"), wave1_row as u16)].fg,
+            theme::wave_color(Some(1))
+        );
+        assert_eq!(
+            buffer[(column(&lines[unknown_row], "└─"), unknown_row as u16)].fg,
+            theme::wave_color(None)
+        );
+        assert_eq!(
+            buffer[(guide_col, wave0_row as u16)].bg,
+            theme::SELECTION,
+            "le module sélectionné (prod/db) reste surligné"
+        );
+        assert_eq!(
+            buffer[(column(&lines[wave1_row], "└─"), wave1_row as u16)].bg,
+            theme::BG,
+            "un module non sélectionné garde le fond normal"
+        );
     }
 
     #[test]
-    fn reduced_module_listing_keeps_headings_names_and_counters() {
+    fn reduced_module_listing_keeps_names_and_counters_without_heading() {
         let result = run(vec![module("prod/db", "planned", Some(2), Some((1, 2, 3)))]);
         let mut terminal = Terminal::new(TestBackend::new(100, 20)).unwrap();
         let state = ReviewState {
@@ -1624,13 +1642,23 @@ mod tests {
             ..ReviewState::default()
         };
         draw(&mut terminal, &result, &state, &[0], &[]);
-        let text = screen_lines(&terminal).join("\n");
+        let lines = screen_lines(&terminal);
+        let text = lines.join("\n");
 
         assert!(!text.contains("VAGUE"));
-        assert!(text.contains("V2"));
+        assert!(!text.contains("V2"), "pas de ligne d'en-tête compacte");
         assert!(text.contains("└ db"));
         assert!(text.contains("+1 ~2 -3"));
         assert!(text.contains("Aucune ressource."));
+
+        let buffer = terminal.backend().buffer();
+        let row = lines.iter().position(|l| l.contains("└ db")).unwrap();
+        let guide_col = column(&lines[row], "└");
+        assert_eq!(
+            buffer[(guide_col, row as u16)].fg,
+            theme::wave_color(Some(2)),
+            "le guide d'indentation porte la couleur discrète de la vague"
+        );
     }
 
     #[test]

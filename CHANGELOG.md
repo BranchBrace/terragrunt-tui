@@ -1,3 +1,29 @@
+# [1.3.0-rc.1](https://github.com/BranchBrace/terragrunt-tui/compare/v1.2.0...v1.3.0-rc.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **ui:** masquer le diff hors focus détail et vagues sans en-tête bloc ([8bcb21a](https://github.com/BranchBrace/terragrunt-tui/commit/8bcb21aa932f5adca5cbb9c9d7438229cd44d125))
+
+
+### Features
+
+* publier ttui for Terragrunt sur le Microsoft Store en MSIX ([e539960](https://github.com/BranchBrace/terragrunt-tui/commit/e539960e25fe9b097159ef13f16daeedc9a5eea9))
+
+# [1.2.0-rc.3](https://github.com/BranchBrace/terragrunt-tui/compare/v1.2.0-rc.2...v1.2.0-rc.3) (2026-11-18)
+
+
+### Features
+
+* publier ttui for Terragrunt sur le Microsoft Store en MSIX ([e539960](https://github.com/BranchBrace/terragrunt-tui/commit/e539960e25fe9b097159ef13f16daeedc9a5eea9))
+
+# [1.2.0-rc.2](https://github.com/BranchBrace/terragrunt-tui/compare/v1.2.0-rc.1...v1.2.0-rc.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* **ui:** masquer le diff hors focus détail et vagues sans en-tête bloc ([8bcb21a](https://github.com/BranchBrace/terragrunt-tui/commit/8bcb21aa932f5adca5cbb9c9d7438229cd44d125))
+
 # [1.2.0](https://github.com/BranchBrace/terragrunt-tui/compare/v1.1.0...v1.2.0) (2026-11-05)
 
 
