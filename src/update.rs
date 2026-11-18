@@ -11,6 +11,9 @@ const REPOSITORY: &str = concat!(env!("CARGO_PKG_REPOSITORY"), ".git");
 const BINARIES: [&str; 2] = ["ttui", "terragrunt-tui"];
 
 pub fn run(rc: bool) -> Result<i32, Box<dyn std::error::Error>> {
+    if crate::store::packaged() {
+        return Ok(crate::store::update());
+    }
     let tags = remote_tags()?;
     let Some(target) = latest_tag(&tags, rc) else {
         let kind = if rc { "release" } else { "release stable" };

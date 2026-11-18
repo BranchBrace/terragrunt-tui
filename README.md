@@ -41,6 +41,12 @@ sudo apt upgrade
 
 Le canal `stable` suit les releases de `main` ; remplacer `stable` par `rc` dans la ligne `deb` pour suivre aussi les prereleases. Les binaires sont statiques (musl, amd64) : aucune dépendance système, quelle que soit la version d’Ubuntu. Chaque release GitHub porte aussi le `.deb` et une archive `.tar.gz` des binaires.
 
+### Windows — Microsoft Store
+
+Installer [ttui for Terragrunt](https://apps.microsoft.com/detail/9MSXGP354MFL) depuis le Microsoft Store. Les commandes `ttui` et `terragrunt-tui` sont ensuite disponibles dans tout terminal (Windows Terminal, PowerShell, invite de commandes) ; le Store installe les mises à jour des releases stables, et `ttui update` ouvre la fiche du Store. Lancée depuis le menu Démarrer, l’application rappelle qu’elle s’utilise dans un terminal.
+
+Le paquet MSIX se construit avec `scripts/package-msix.ps1` (voir [docs/microsoft-store.md](docs/microsoft-store.md)).
+
 ### Depuis les sources
 
 ```sh
@@ -94,6 +100,10 @@ Les groupes `W0`, `W1`, etc. représentent la profondeur du graphe de dépendanc
 Les plans natifs et JSON structurés restent dans un répertoire temporaire marqué, supprimé après fin normale ou interruption gérée. Au démarrage, seuls les restes munis du marqueur Terragrunt TUI sont proposés ; rien n’est supprimé automatiquement et leur nettoyage demande une confirmation distincte. Le JSON sauvegardé ne contient ni fichiers natifs ni journaux bruts.
 
 Les attributs signalés sensibles par le plan sont masqués dans les valeurs before/after et dans les changements sauvegardés. Cette protection ne garantit pas l’absence de secrets dans les journaux, les sorties fournisseur, les valeurs inconnues, la mémoire ou les fichiers natifs temporaires. Pour une première utilisation, choisir une fixture jetable sans données sensibles et inspecter le plan avant toute action séparée.
+
+## Confidentialité
+
+Terragrunt TUI ne collecte, ne transmet ni ne partage aucune donnée personnelle ou d’usage : pas de télémétrie, pas de compte, pas de serveur. Il lit les fichiers du dépôt Terragrunt désigné et écrit son résultat redacted dans ce dépôt (`.terragrunt-tui/`). Les seuls accès réseau sont ceux de Terragrunt lui-même, lancé à la demande de l’utilisateur avec ses propres identifiants, et, sur demande explicite, `ttui update`, qui lit les tags publics de ce dépôt GitHub (ou ouvre la fiche du Microsoft Store dans la version Store).
 
 ## Installation et tests par shell
 
