@@ -18,7 +18,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: {ref: "${{ inputs.tag }}"}
+        # dry_run ne construit rien : il prend les scripts du commit du workflow, même si le
+        # tag est antérieur à scripts/publish-store.ps1.
+        with: {ref: "${{ inputs.dry_run && github.sha || inputs.tag }}"}
       - uses: actions-rust-lang/setup-rust-toolchain@ac90e63697ac2784f4ecfe2964e1a285c304003a # v1.14.1
         if: ${{ !inputs.dry_run }}
         with: {toolchain: stable}
