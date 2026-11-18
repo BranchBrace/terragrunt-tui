@@ -5,6 +5,7 @@
 - Commits au format Conventional Commits : ils pilotent semantic-release (`feat` → minor, `fix` → patch, `!` → major).
 - La CI (`.github/workflows/quality-release.yml`) détecte la stack : ajouter les scripts `lint`, `typecheck`, `test`, `build` (Node), une solution `.slnx` (.NET) ou un `pyproject.toml` (Python) suffit à les faire exécuter. Semgrep tourne toujours.
 - Aucun artefact CI : pas de rapport, trace ni capture Playwright téléversés.
+- Microsoft Store : chaque release stable de `main` est construite en MSIX et soumise en certification par `.github/workflows/store.yml` (OIDC vers l'app Entra `github-store-submission`, sans secret) ; voir `docs/microsoft-store.md`.
 - Images de release : les déclarer dans `deploy/images.txt` ; elles sont publiées sur GHCR à chaque release. Le staging Argo CD se branche ensuite (`staging-gitops-tsuzuri/docs/onboarding.md`).
 - Licence MIT : `LICENSE` et `license = "MIT"` dans `Cargo.toml` (`"license": "MIT"` dans tout `package.json`).
 - Spécifications : `docs/specs/` ; suivi du travail : projet Paperclip « Terragrunt TUI ».

@@ -27,16 +27,41 @@ Valeurs réservées dans Partner Center (compte développeur individuel « Antoi
 
 ## Publier une nouvelle version
 
-Sur un poste Windows avec la toolchain Rust MSVC et le Windows SDK, depuis le tag de la release stable :
+C'est automatique. Quand le pipeline `quality-release` publie une release stable sur `main`, il appelle [`.github/workflows/store.yml`](../.github/workflows/store.yml). Ce workflow tourne sur un runner Windows :
+
+1. il construit le MSIX depuis le tag avec `scripts/package-msix.ps1` ;
+2. il le soumet avec [`scripts/publish-store.ps1`](../scripts/publish-store.ps1), qui passe par l'API de soumission du Microsoft Store.
+
+La nouvelle soumission reprend la fiche, le prix et la classification de la précédente. Seul le paquet change : l'ancien est retiré. La soumission part en certification puis est publiée automatiquement si elle passe, ce qui prend de quelques heures à 3 jours ouvrés. Les release candidates de `rc` ne vont jamais au Store.
+
+L'API refuse de créer une soumission tant qu'une autre est en cours. Le job échoue alors avec un message clair. Il faut terminer ou supprimer la soumission en cours dans Partner Center, puis relancer le workflow `microsoft-store` à la main avec le tag.
+
+### Authentification
+
+Aucun secret n'est stocké. Le job se connecte par OIDC à l'application Entra **github-store-submission** :
+
+- tenant `55a83d13-da5a-48c1-8d14-32229bee09ec` ;
+- client `d39b44b7-6b1a-47ec-beda-a212c4224024` ;
+- variables du dépôt `STORE_TENANT_ID` et `STORE_CLIENT_ID` ;
+- identités fédérées pour la branche `main` de terragrunt-tui et de branchbrace.
+
+L'application doit être associée au compte Partner Center avec le rôle **Gestionnaire** : Paramètres du compte > Gestion des utilisateurs > Applications Microsoft Entra. Cela suppose que le tenant soit d'abord associé au compte (Paramètres du compte > Locataires).
+
+Pour vérifier l'accès sans rien soumettre, lancer le workflow `microsoft-store` à la main, sur `main`, avec `dry_run` coché.
+
+### À la main
+
+Sur un poste Windows avec la toolchain Rust MSVC et le Windows SDK, depuis le tag :
 
 ```powershell
 git checkout vX.Y.Z
 pwsh scripts/package-msix.ps1
 ```
 
-Le paquet sort dans `dist\ttui-for-terragrunt-X.Y.Z.0-x64.msix`, une taille de l'ordre du mégaoctet. Dans Partner Center : **Mettre à jour** la soumission, **Packages**, téléverser le `.msix` puis supprimer l'ancien paquet, et **Soumettre à la Store**. La certification prend de quelques heures à 3 jours ouvrés.
+Le paquet sort dans `dist	tui-for-terragrunt-X.Y.Z.0-x64.msix`, une taille de l'ordre du mégaoctet. Deux façons de le soumettre :
 
-Le CLI `msstore` peut automatiser cette étape une fois configuré. Il faut d'abord une application Entra ID associée à Partner Center (tenantId, sellerId, clientId, clientSecret), puis lancer `msstore reconfigure`. Il n'est pas configuré pour l'instant.
+- dans Partner Center : **Mettre à jour** la soumission, **Packages**, téléverser le `.msix`, puis **Soumettre pour certification** ;
+- en ligne de commande, après un `az login` sur un compte qui a accès à Partner Center : `pwsh scripts/publish-store.ps1 -Msix <paquet>`.
 
 ## Fiche Store
 
