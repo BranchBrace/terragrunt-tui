@@ -58,7 +58,7 @@ git checkout vX.Y.Z
 pwsh scripts/package-msix.ps1
 ```
 
-Le paquet sort dans `dist	tui-for-terragrunt-X.Y.Z.0-x64.msix`, une taille de l'ordre du mégaoctet. Deux façons de le soumettre :
+Le paquet sort dans `dist\ttui-for-terragrunt-X.Y.Z.0-x64.msix`, une taille de l'ordre du mégaoctet. Deux façons de le soumettre :
 
 - dans Partner Center : **Mettre à jour** la soumission, **Packages**, téléverser le `.msix`, puis **Soumettre pour certification** ;
 - en ligne de commande, après un `az login` sur un compte qui a accès à Partner Center : `pwsh scripts/publish-store.ps1 -Msix <paquet>`.
