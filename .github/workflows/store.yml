@@ -1,0 +1,39 @@
+name: microsoft-store
+# Construit le MSIX d'une release stable et le soumet en certification sur le Microsoft Store
+# (docs/microsoft-store.md). Appelé par quality-release après chaque release de main ;
+# lançable à la main, en dry_run pour vérifier l'accès à Partner Center sans rien soumettre.
+# Authentification OIDC à l'application Entra « github-store-submission » : aucun secret.
+on:
+  workflow_call:
+    inputs:
+      tag: {type: string, required: true}
+  workflow_dispatch:
+    inputs:
+      tag: {description: 'Tag de release stable (vX.Y.Z)', type: string, required: true}
+      dry_run: {description: "Vérifier l'accès sans soumettre", type: boolean, default: true}
+permissions: {contents: read, id-token: write}
+concurrency: {group: microsoft-store, cancel-in-progress: false}
+jobs:
+  submit:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {ref: "${{ inputs.tag }}"}
+      - uses: actions-rust-lang/setup-rust-toolchain@ac90e63697ac2784f4ecfe2964e1a285c304003a # v1.14.1
+        if: ${{ !inputs.dry_run }}
+        with: {toolchain: stable}
+      - name: Paquet MSIX
+        if: ${{ !inputs.dry_run }}
+        shell: pwsh
+        run: ./scripts/package-msix.ps1
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.STORE_CLIENT_ID }}
+          tenant-id: ${{ vars.STORE_TENANT_ID }}
+          allow-no-subscriptions: true
+      - name: Soumission au Microsoft Store
+        shell: pwsh
+        env: {DRY_RUN: "${{ inputs.dry_run }}"}
+        run: |
+          if ($env:DRY_RUN -eq 'true') { ./scripts/publish-store.ps1 -DryRun; exit }
+          ./scripts/publish-store.ps1 -Msix (Get-Item dist\*.msix).FullName
