@@ -4,7 +4,7 @@
 //! de recompiler une release. Lancée depuis le menu Démarrer, l'application reçoit une console
 //! à elle seule, qui se fermerait dès la fin du processus : on attend alors Entrée.
 
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 
 /// Fiche de l'application dans le Microsoft Store.
 pub const STORE_PAGE: &str = "ms-windows-store://pdp/?productid=9MSXGP354MFL";
@@ -27,8 +27,13 @@ pub fn update() -> i32 {
 /// Garde ouverte une console créée pour ce seul processus (menu Démarrer, Explorateur), le
 /// temps de lire ce qui s'y est affiché. Sans effet dans un terminal déjà ouvert.
 pub fn pause_if_console_closes_on_exit() {
-    if !imp::owns_console() {
+    // Depuis WSL (interop), le processus a aussi une console à lui, mais pas de terminal en
+    // entrée : on ne doit ni proposer ni attendre quoi que ce soit.
+    if !imp::owns_console() || !io::stdin().is_terminal() {
         return;
+    }
+    if packaged() {
+        crate::wsl::offer_from_start_menu();
     }
     eprint!(
         "\nterragrunt-tui s'utilise dans un terminal : ouvrir Windows Terminal ou PowerShell \

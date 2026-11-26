@@ -11,8 +11,13 @@
 .PARAMETER Version
   Version stable X.Y.Z ; par défaut celle de Cargo.toml. Le Store impose une version à
   4 parties qui augmente à chaque soumission : le paquet porte X.Y.Z.0.
+
+.PARAMETER LinuxTarball
+  Archive musl de la même release (terragrunt-tui-X.Y.Z-x86_64-unknown-linux-musl.tar.gz,
+  asset de la release GitHub). Son binaire est embarqué dans linux\ : `ttui wsl install`
+  le copie dans les distributions WSL. Obligatoire.
 #>
-param([string]$Version)
+param([string]$Version, [Parameter(Mandatory)][string]$LinuxTarball)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -25,6 +30,16 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') {
   throw "Le Store ne publie que des versions stables X.Y.Z (reçu : $Version). Passer -Version."
 }
 $packageVersion = "$Version.0"
+
+$linuxTarget = 'x86_64-unknown-linux-musl'
+$expectedTarball = "terragrunt-tui-$Version-$linuxTarget.tar.gz"
+if (-not (Test-Path -PathType Leaf $LinuxTarball)) {
+  throw "Archive Linux introuvable : $LinuxTarball"
+}
+$LinuxTarball = (Resolve-Path $LinuxTarball).Path
+if ((Split-Path -Leaf $LinuxTarball) -ne $expectedTarball) {
+  throw "L'archive Linux doit être celle de la même version : $expectedTarball (reçu : $(Split-Path -Leaf $LinuxTarball))."
+}
 
 # Outils du Windows SDK (le plus récent installé), ou dossier imposé par WINDOWS_KITS_PATH.
 $kit = $env:WINDOWS_KITS_PATH
@@ -48,6 +63,17 @@ try {
   New-Item -ItemType Directory -Force $stage | Out-Null
   Copy-Item 'target\release\terragrunt-tui.exe', 'LICENSE' $stage
   Copy-Item -Recurse 'packaging\msix\Assets' $stage
+
+  # Binaire Linux embarqué pour `ttui wsl install` (docs/specs/wsl-store-install.md).
+  $extract = Join-Path $root 'target\msix\linux'
+  if (Test-Path $extract) { Remove-Item -Recurse -Force $extract }
+  New-Item -ItemType Directory -Force $extract | Out-Null
+  tar -xzf $LinuxTarball -C $extract
+  if ($LASTEXITCODE) { throw "Extraction de $LinuxTarball impossible ($LASTEXITCODE)." }
+  $linuxBinary = Join-Path (Join-Path $extract "terragrunt-tui-$Version-$linuxTarget") 'terragrunt-tui'
+  if (-not (Test-Path -PathType Leaf $linuxBinary)) { throw "Binaire terragrunt-tui absent de $LinuxTarball." }
+  New-Item -ItemType Directory -Force (Join-Path $stage 'linux') | Out-Null
+  Copy-Item $linuxBinary (Join-Path (Join-Path $stage 'linux') 'terragrunt-tui')
   (Get-Content -Raw 'packaging\msix\AppxManifest.xml').Replace('@VERSION@', $packageVersion) |
     Set-Content -NoNewline -Encoding utf8 (Join-Path $stage 'AppxManifest.xml')
 

@@ -16,6 +16,7 @@ Valeurs réservées dans Partner Center (compte développeur individuel « Antoi
 ## Le paquet
 
 - Application console empaquetée en MSIX : `desktop4:Subsystem="console"`, et deux alias d'exécution (`terragrunt-tui.exe`, `ttui.exe`) qui pointent vers le même binaire et le mettent dans le PATH de tout terminal.
+- Binaire Linux musl x64 de la même release dans `linux/terragrunt-tui`, que `ttui wsl install` copie dans les distributions WSL (voir [Installation WSL](#installation-wsl)).
 - Capacité restreinte `runFullTrust`, obligatoire pour une application Win32 empaquetée.
 - Langue unique `fr-FR` : l'interface n'existe qu'en français, et chaque langue déclarée exigerait sa propre fiche Store.
 - Paquet non signé : le Store le signe après certification. Aucun certificat n'est nécessaire.
@@ -29,7 +30,7 @@ Valeurs réservées dans Partner Center (compte développeur individuel « Antoi
 
 C'est automatique. Quand le pipeline `quality-release` publie une release stable sur `main`, il appelle [`.github/workflows/store.yml`](../.github/workflows/store.yml). Ce workflow tourne sur un runner Windows :
 
-1. il construit le MSIX depuis le tag avec `scripts/package-msix.ps1` ;
+1. il télécharge l'archive musl de la release (`terragrunt-tui-X.Y.Z-x86_64-unknown-linux-musl.tar.gz`, publiée par le job `release`), puis construit le MSIX depuis le tag avec `scripts/package-msix.ps1` ;
 2. il le soumet avec [`scripts/publish-store.ps1`](../scripts/publish-store.ps1), qui passe par l'API de soumission du Microsoft Store.
 
 La nouvelle soumission reprend la fiche, le prix et la classification de la précédente. Seul le paquet change : l'ancien est retiré. La soumission part en certification puis est publiée automatiquement si elle passe, ce qui prend de quelques heures à 3 jours ouvrés. Les release candidates de `rc` ne vont jamais au Store.
@@ -55,10 +56,11 @@ Sur un poste Windows avec la toolchain Rust MSVC et le Windows SDK, depuis le ta
 
 ```powershell
 git checkout vX.Y.Z
-pwsh scripts/package-msix.ps1
+gh release download vX.Y.Z --pattern '*-x86_64-unknown-linux-musl.tar.gz' --dir target/release-assets
+pwsh scripts/package-msix.ps1 -LinuxTarball target/release-assets/terragrunt-tui-X.Y.Z-x86_64-unknown-linux-musl.tar.gz
 ```
 
-Le paquet sort dans `dist\ttui-for-terragrunt-X.Y.Z.0-x64.msix`, une taille de l'ordre du mégaoctet. Deux façons de le soumettre :
+Le paquet sort dans `dist\ttui-for-terragrunt-X.Y.Z.0-x64.msix`, de quelques mégaoctets. Le script refuse une archive Linux d'une autre version : un paquet Store sans binaire Linux ne doit pas partir. Deux façons de le soumettre :
 
 - dans Partner Center : **Mettre à jour** la soumission, **Packages**, téléverser le `.msix`, puis **Soumettre pour certification** ;
 - en ligne de commande, après un `az login` sur un compte qui a accès à Partner Center : `pwsh scripts/publish-store.ps1 -Msix <paquet>`.
@@ -70,4 +72,15 @@ Le paquet sort dans `dist\ttui-for-terragrunt-X.Y.Z.0-x64.msix`, une taille de l
 - Classification IARC : 3+.
 - Politique de confidentialité : section [Confidentialité](../README.md#confidentialit%C3%A9) du README. Partner Center refuse une URL qui contient des accents bruts : utiliser l'URL encodée.
 - Captures : `packaging/msix/screenshots/*.png` en 1920×1080, régénérables avec `vhs packaging/msix/screenshots.tape`.
-- Justification de `runFullTrust` : application console Win32 qui lance le binaire `terragrunt` de l'utilisateur et lit les fichiers du dépôt choisi ; aucune élévation de privilèges ; Terragrunt n'est pas requis pour tester la revue d'un résultat de démonstration.
+- Justification de `runFullTrust` : application console Win32 qui lance le binaire `terragrunt` de l'utilisateur et lit les fichiers du dépôt choisi ; à la demande explicite de l'utilisateur (`ttui wsl install`), elle lance `wsl.exe` pour copier son binaire Linux, embarqué dans le paquet, dans le dossier personnel de ses distributions WSL ; rien n'est téléchargé ; aucune élévation de privilèges ; Terragrunt n'est pas requis pour tester la revue d'un résultat de démonstration.
+- Description : mentionner que `ttui wsl install` rend aussi la commande disponible dans WSL.
+
+## Installation WSL
+
+Spécification : [docs/specs/wsl-store-install.md](specs/wsl-store-install.md). Code : [`src/wsl.rs`](../src/wsl.rs).
+
+- `ttui wsl install [--distro <nom>]… [--force]`, depuis Windows : liste les distributions (`wsl.exe --list --quiet`, sans celles de Docker Desktop), envoie `linux/terragrunt-tui` sur l'entrée standard de `wsl.exe`, qui le dépose dans `~/.local/bin/.terragrunt-tui.tmp`, puis lance sa commande interne `wsl adopt`. Celle-ci ignore la distribution si `ttui` y existe déjà hors de ce mécanisme ; sinon elle renomme la copie en `~/.local/bin/terragrunt-tui`, crée le lien `ttui` et écrit le marqueur `~/.local/share/terragrunt-tui/store-install.json`.
+- Le chemin de l'alias `ttui.exe` passe dans la distribution par `WSLENV` (`TTUI_WINDOWS_EXE/p`) et s'inscrit dans le marqueur : la copie joint le paquet même quand `appendWindowsPath=false`.
+- Mise à jour : une copie marquée lance `ttui.exe version` au plus une fois par jour (horodatage `~/.cache/terragrunt-tui/store-check`, timeout 2 s). Si le paquet est plus récent, elle récupère le binaire par `ttui.exe wsl binary` (commande interne qui écrit `linux/terragrunt-tui` sur stdout), vérifie la version qu'il annonce, le met en place et se relance.
+- `ttui wsl uninstall [--distro <nom>]…` retire les fichiers listés par le marqueur, rien d'autre.
+

@@ -1,4 +1,4 @@
-use crate::{engine, model, store, ui, update};
+use crate::{engine, model, store, ui, update, wsl};
 use clap::{Parser, Subcommand};
 use std::fs::{self, OpenOptions};
 use std::io::{self, IsTerminal};
@@ -38,10 +38,15 @@ enum Command {
     },
     /// Print the installed version.
     Version,
+    /// Install the command into WSL (Microsoft Store version).
+    Wsl {
+        #[command(subcommand)]
+        command: wsl::WslCommand,
+    },
 }
 
 /// Version embedded by `build.rs`.
-const VERSION: &str = env!("TTUI_VERSION");
+pub(crate) const VERSION: &str = env!("TTUI_VERSION");
 
 /// Entry point shared by the `terragrunt-tui` and `ttui` binaries.
 pub fn main() {
@@ -74,6 +79,9 @@ fn outcome(result: Result<i32, Box<dyn std::error::Error>>) -> i32 {
 }
 
 fn execute(cli: Cli) -> Result<i32, Box<dyn std::error::Error>> {
+    if matches!(cli.command, Command::Run { .. } | Command::Show { .. }) {
+        wsl::on_startup();
+    }
     match cli.command {
         Command::Run {
             cwd,
@@ -86,6 +94,7 @@ fn execute(cli: Cli) -> Result<i32, Box<dyn std::error::Error>> {
             println!("terragrunt-tui {VERSION}");
             Ok(0)
         }
+        Command::Wsl { command } => wsl::run(command),
     }
 }
 

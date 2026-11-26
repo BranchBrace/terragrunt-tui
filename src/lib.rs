@@ -9,5 +9,6 @@ mod store;
 mod theme;
 mod ui;
 mod update;
+mod wsl;
 
 pub use cli::main;

@@ -41,9 +41,19 @@ sudo apt upgrade
 
 Le canal `stable` suit les releases de `main` ; remplacer `stable` par `rc` dans la ligne `deb` pour suivre aussi les prereleases. Les binaires sont statiques (musl, amd64) : aucune dépendance système, quelle que soit la version d’Ubuntu. Chaque release GitHub porte aussi le `.deb` et une archive `.tar.gz` des binaires.
 
+Une distribution équipée par le dépôt apt est ignorée par `ttui wsl install` (version Microsoft Store, ci-dessous) : les deux voies ne se mélangent pas dans une même distribution.
+
 ### Windows — Microsoft Store
 
 Installer [ttui for Terragrunt](https://apps.microsoft.com/detail/9MSXGP354MFL) depuis le Microsoft Store. Les commandes `ttui` et `terragrunt-tui` sont ensuite disponibles dans tout terminal (Windows Terminal, PowerShell, invite de commandes) ; le Store installe les mises à jour des releases stables, et `ttui update` ouvre la fiche du Store. Lancée depuis le menu Démarrer, l’application rappelle qu’elle s’utilise dans un terminal.
+
+Pour avoir aussi `ttui` dans WSL, lancer depuis un terminal Windows :
+
+```powershell
+ttui wsl install
+```
+
+La commande copie le binaire Linux du paquet dans `~/.local/bin` de chaque distribution WSL (sauf celles de Docker Desktop ; `--distro <nom>` pour en viser une). Une distribution où `ttui` est déjà installé autrement (apt, cargo) est ignorée, sauf avec `--force`. Le lancement depuis le menu Démarrer propose aussi cette installation, une seule fois. Dans WSL, la copie se met ensuite à jour seule : au plus une fois par jour, elle se compare au paquet Store et se remplace par sa version plus récente ; `ttui update` le fait tout de suite. Avant de désinstaller l’application, lancer `ttui wsl uninstall`, qui retire ces copies : le Store ne peut pas toucher aux distributions WSL.
 
 Le paquet MSIX se construit avec `scripts/package-msix.ps1` (voir [docs/microsoft-store.md](docs/microsoft-store.md)).
 

@@ -24,10 +24,20 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@ac90e63697ac2784f4ecfe2964e1a285c304003a # v1.14.1
         if: ${{ !inputs.dry_run }}
         with: {toolchain: stable}
+      # Binaire Linux embarqué pour `ttui wsl install` : l'archive musl de la même release,
+      # publiée par le job release (relance manuelle comprise : elle survit au run).
+      - name: Binaire Linux de la release
+        if: ${{ !inputs.dry_run }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: gh release download $env:TAG --repo $env:REPOSITORY --pattern '*-x86_64-unknown-linux-musl.tar.gz' --dir target/release-assets
       - name: Paquet MSIX
         if: ${{ !inputs.dry_run }}
         shell: pwsh
-        run: ./scripts/package-msix.ps1
+        run: ./scripts/package-msix.ps1 -LinuxTarball (Get-ChildItem target/release-assets/*.tar.gz | Select-Object -First 1).FullName
       - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ vars.STORE_CLIENT_ID }}
