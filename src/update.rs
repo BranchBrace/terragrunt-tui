@@ -14,6 +14,9 @@ pub fn run(rc: bool) -> Result<i32, Box<dyn std::error::Error>> {
     if crate::store::packaged() {
         return Ok(crate::store::update());
     }
+    if let Some(result) = crate::wsl::update_if_store_managed() {
+        return result;
+    }
     let tags = remote_tags()?;
     let Some(target) = latest_tag(&tags, rc) else {
         let kind = if rc { "release" } else { "release stable" };
@@ -72,7 +75,7 @@ fn remote_tags() -> Result<Vec<String>, Box<dyn std::error::Error>> {
 }
 
 /// Version d'un tag `vX.Y.Z` ou `vX.Y.Z-rc.N` ; une version stable passe après ses rc.
-fn version(tag: &str) -> Option<(u64, u64, u64, u64)> {
+pub(crate) fn version(tag: &str) -> Option<(u64, u64, u64, u64)> {
     let (core, pre) = match tag.strip_prefix('v')?.split_once('-') {
         Some((core, pre)) => (core, Some(pre.strip_prefix("rc.")?.parse().ok()?)),
         None => (tag.strip_prefix('v')?, None),
